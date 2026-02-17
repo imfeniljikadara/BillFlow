@@ -1,0 +1,382 @@
+import { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Dimensions } from 'react-native';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Feather } from '@expo/vector-icons';
+import { useAppStore } from '../store/appStore';
+import { useTheme } from '../contexts/ThemeContext';
+import { Invoice } from '../types';
+import { InvoiceCard } from '../components/InvoiceCard';
+
+const { width } = Dimensions.get('window');
+
+type FilterType = 'ALL' | 'PAID' | 'PENDING' | 'OVERDUE';
+
+export default function InvoicesScreen() {
+    const router = useRouter();
+    const { invoices } = useAppStore();
+    const { isDark, colors } = useTheme();
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeFilter, setActiveFilter] = useState<FilterType>('ALL');
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Filter and search invoices
+    const filteredInvoices = useMemo(() => {
+        let result = [...invoices];
+
+        // Apply status filter
+        if (activeFilter !== 'ALL') {
+            result = result.filter(inv => inv.status === activeFilter);
+        }
+
+        // Apply search
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(inv =>
+                inv.clientName.toLowerCase().includes(query) ||
+                inv.clientEmail?.toLowerCase().includes(query) ||
+                inv.id.toLowerCase().includes(query)
+            );
+        }
+
+        // Sort by date (newest first)
+        result.sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime());
+
+        return result;
+    }, [invoices, activeFilter, searchQuery]);
+
+    // Stats
+    const stats = useMemo(() => ({
+        all: invoices.length,
+        paid: invoices.filter(inv => inv.status === 'PAID').length,
+        pending: invoices.filter(inv => inv.status === 'PENDING').length,
+        overdue: invoices.filter(inv => inv.status === 'OVERDUE').length,
+    }), [invoices]);
+
+    // Removed inline getStatusColor helper
+
+    // Removed inline formatDate helper as it's now handled in InvoiceCard
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        setTimeout(() => setRefreshing(false), 1000);
+    };
+
+    const filters: { key: FilterType; label: string; count: number }[] = [
+        { key: 'ALL', label: 'All', count: stats.all },
+        { key: 'PENDING', label: 'Pending', count: stats.pending },
+        { key: 'PAID', label: 'Paid', count: stats.paid },
+        { key: 'OVERDUE', label: 'Overdue', count: stats.overdue },
+    ];
+
+    const renderInvoice = ({ item, index }: { item: Invoice, index: number }) => (
+        <InvoiceCard invoice={item} index={index} />
+    );
+
+    const renderEmptyState = () => (
+        <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIconBox, { backgroundColor: isDark ? colors.inputBg : '#EFF6FF' }]}>
+                <Feather name="inbox" size={40} color={colors.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                {searchQuery ? 'No results found' : 'No invoices yet'}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+                {searchQuery
+                    ? `We couldn't find any invoices matching "${searchQuery}"`
+                    : 'Create your first invoice to get started with tracking payments'
+                }
+            </Text>
+            {!searchQuery && (
+                <TouchableOpacity
+                    style={styles.emptyButton}
+                    onPress={() => router.push('/create')}
+                >
+                    <Feather name="plus" size={18} color="#FFF" />
+                    <Text style={styles.emptyButtonText}>Create Invoice</Text>
+                </TouchableOpacity>
+            )}
+        </View>
+    );
+
+    return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+
+            {/* Header */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: colors.inputBg }]}>
+                    <Feather name="arrow-left" size={22} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>All Invoices</Text>
+                <TouchableOpacity
+                    style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => router.push('/create')}
+                >
+                    <Feather name="plus" size={22} color="#FFF" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Feather name="search" size={18} color={colors.textSecondary} />
+                <TextInput
+                    style={[styles.searchInput, { color: colors.text }]}
+                    placeholder="Search by name, email or ID..."
+                    placeholderTextColor={colors.textSecondary}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <Feather name="x" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                )}
+            </View>
+
+            {/* Filter Tabs */}
+            <View style={styles.filterContainer}>
+                <FlatList
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    data={filters}
+                    keyExtractor={(item) => item.key}
+                    contentContainerStyle={styles.filterList}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={[
+                                styles.filterTab,
+                                {
+                                    backgroundColor: activeFilter === item.key ? colors.primary : colors.card,
+                                    borderColor: activeFilter === item.key ? colors.primary : colors.border,
+                                }
+                            ]}
+                            onPress={() => setActiveFilter(item.key)}
+                        >
+                            <Text style={[
+                                styles.filterLabel,
+                                { color: activeFilter === item.key ? '#FFF' : colors.text }
+                            ]}>
+                                {item.label}
+                            </Text>
+                            <View style={[
+                                styles.filterCount,
+                                { backgroundColor: activeFilter === item.key ? 'rgba(255,255,255,0.2)' : colors.inputBg }
+                            ]}>
+                                <Text style={[
+                                    styles.filterCountText,
+                                    { color: activeFilter === item.key ? '#FFF' : colors.textSecondary }
+                                ]}>
+                                    {item.count}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+
+            {/* Results count */}
+            <View style={styles.resultsHeader}>
+                <Text style={[styles.resultsCount, { color: colors.textSecondary }]}>
+                    {filteredInvoices.length} {filteredInvoices.length === 1 ? 'invoice' : 'invoices'} found
+                </Text>
+            </View>
+
+            {/* Invoice List */}
+            <FlatList
+                data={filteredInvoices}
+                keyExtractor={(item) => item.id}
+                renderItem={renderInvoice}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+                }
+                ListEmptyComponent={renderEmptyState}
+            />
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 60,
+        paddingHorizontal: 24,
+        paddingBottom: 20,
+    },
+    backBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    addBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    searchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 24,
+        paddingHorizontal: 16,
+        height: 50,
+        borderRadius: 14,
+        borderWidth: 1,
+        gap: 12,
+        marginBottom: 16,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 15,
+    },
+    filterContainer: {
+        marginBottom: 16,
+    },
+    filterList: {
+        paddingHorizontal: 24,
+        gap: 10,
+    },
+    filterTab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 8,
+    },
+    filterLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    filterCount: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    filterCountText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    resultsHeader: {
+        paddingHorizontal: 24,
+        marginBottom: 12,
+    },
+    resultsCount: {
+        fontSize: 13,
+    },
+    listContent: {
+        paddingHorizontal: 24,
+        paddingBottom: 100,
+    },
+    invoiceCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 18,
+        marginBottom: 10,
+        borderWidth: 1,
+    },
+    invoiceAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    invoiceAvatarText: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    invoiceInfo: {
+        flex: 1,
+        marginLeft: 14,
+    },
+    invoiceName: {
+        fontSize: 15,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    invoiceId: {
+        fontSize: 12,
+    },
+    invoiceRight: {
+        alignItems: 'flex-end',
+    },
+    invoiceAmount: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 6,
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        gap: 4,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    statusText: {
+        fontSize: 10,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+    emptyIconBox: {
+        width: 80,
+        height: 80,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        marginBottom: 8,
+    },
+    emptySubtitle: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 24,
+    },
+    emptyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 24,
+        paddingVertical: 14,
+        borderRadius: 14,
+        gap: 8,
+    },
+    emptyButtonText: {
+        color: '#FFFFFF',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+});
