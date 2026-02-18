@@ -28,6 +28,10 @@ export default function EditInvoiceScreen() {
     const [notes, setNotes] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
+    
+    // Recurring invoice state
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [recurrenceInterval, setRecurrenceInterval] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
 
     // Validation
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -40,6 +44,9 @@ export default function EditInvoiceScreen() {
             setItems(invoice.items || [{ description: '', quantity: 1, price: 0 }]);
             setNotes(invoice.notes || '');
             setDueDate(invoice.dueDate || '');
+            // Load recurring settings
+            setIsRecurring(invoice.isRecurring || false);
+            setRecurrenceInterval(invoice.recurrenceInterval || 'monthly');
         }
     }, [invoice]);
 
@@ -140,6 +147,36 @@ export default function EditInvoiceScreen() {
             }
             if (dueDate) {
                 updateData.dueDate = dueDate;
+            }
+
+            // Add recurring invoice fields
+            updateData.isRecurring = isRecurring;
+            if (isRecurring) {
+                updateData.recurrenceInterval = recurrenceInterval;
+                
+                // Calculate next recurrence date if not already set or if interval changed
+                if (!invoice.nextRecurrenceDate || invoice.recurrenceInterval !== recurrenceInterval) {
+                    const now = new Date();
+                    const nextDate = new Date(now);
+                    
+                    switch (recurrenceInterval) {
+                        case 'weekly':
+                            nextDate.setDate(nextDate.getDate() + 7);
+                            break;
+                        case 'monthly':
+                            nextDate.setMonth(nextDate.getMonth() + 1);
+                            break;
+                        case 'yearly':
+                            nextDate.setFullYear(nextDate.getFullYear() + 1);
+                            break;
+                    }
+                    
+                    updateData.nextRecurrenceDate = nextDate.toISOString();
+                }
+            } else {
+                // Clear recurring fields if disabled
+                updateData.recurrenceInterval = null;
+                updateData.nextRecurrenceDate = null;
             }
 
             await updateInvoice(invoice.id, updateData);
@@ -324,6 +361,61 @@ export default function EditInvoiceScreen() {
                                 numberOfLines={4}
                             />
                         </View>
+                    </View>
+                </View>
+
+                {/* Recurring Invoice Section */}
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Recurring Invoice</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <TouchableOpacity 
+                            style={styles.recurringToggle}
+                            onPress={() => setIsRecurring(!isRecurring)}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.recurringLabel, { color: colors.text }]}>Make this recurring</Text>
+                                <Text style={[styles.recurringSubtext, { color: colors.textSecondary }]}>
+                                    Auto-generate invoices at regular intervals
+                                </Text>
+                            </View>
+                            <View style={[styles.toggleSwitch, { backgroundColor: isRecurring ? colors.primary : colors.inputBg }]}>
+                                <View style={[styles.toggleKnob, { transform: [{ translateX: isRecurring ? 20 : 0 }] }]} />
+                            </View>
+                        </TouchableOpacity>
+
+                        {isRecurring && (
+                            <View style={styles.recurringOptions}>
+                                <Text style={[styles.label, { color: colors.textSecondary }]}>RECURRENCE INTERVAL</Text>
+                                <View style={styles.intervalButtons}>
+                                    {(['weekly', 'monthly', 'yearly'] as const).map((interval) => (
+                                        <TouchableOpacity
+                                            key={interval}
+                                            style={[
+                                                styles.intervalBtn,
+                                                {
+                                                    backgroundColor: recurrenceInterval === interval ? colors.primary : colors.inputBg,
+                                                    borderColor: colors.border,
+                                                }
+                                            ]}
+                                            onPress={() => setRecurrenceInterval(interval)}
+                                        >
+                                            <Text style={[
+                                                styles.intervalBtnText,
+                                                { color: recurrenceInterval === interval ? '#FFF' : colors.text }
+                                            ]}>
+                                                {interval.charAt(0).toUpperCase() + interval.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <View style={[styles.recurringInfo, { backgroundColor: colors.inputBg }]}>
+                                    <Feather name="info" size={14} color={colors.primary} />
+                                    <Text style={[styles.recurringInfoText, { color: colors.textSecondary }]}>
+                                        Next invoice will be generated {recurrenceInterval === 'weekly' ? 'next week' : recurrenceInterval === 'monthly' ? 'next month' : 'next year'}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
                     </View>
                 </View>
 
@@ -530,5 +622,65 @@ const styles = StyleSheet.create({
     notFoundText: {
         fontSize: 16,
         fontWeight: '600',
+    },
+    recurringToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingBottom: 16,
+        gap: 12,
+    },
+    recurringLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    recurringSubtext: {
+        fontSize: 13,
+        marginTop: 4,
+    },
+    toggleSwitch: {
+        width: 50,
+        height: 30,
+        borderRadius: 15,
+        padding: 3,
+        justifyContent: 'center',
+    },
+    toggleKnob: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#FFF',
+    },
+    recurringOptions: {
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+        paddingTop: 16,
+    },
+    intervalButtons: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 8,
+    },
+    intervalBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    intervalBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    recurringInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 10,
+        gap: 8,
+    },
+    recurringInfoText: {
+        fontSize: 12,
+        flex: 1,
     },
 });

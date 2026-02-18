@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Invoice, UserProfile, Product } from '../types';
+import { Invoice, UserProfile, Product, Client } from '../types';
 
 interface AppState {
     // Auth State
@@ -23,6 +23,7 @@ interface AppState {
     // Invoice State
     invoices: Invoice[];
     products: Product[];
+    clients: Client[];
 
     // Actions
     initialize: () => () => void; // Returns cleanup function
@@ -31,10 +32,17 @@ interface AppState {
     deleteInvoice: (id: string) => Promise<void>;
     updateInvoiceStatus: (id: string, status: 'PENDING' | 'PAID' | 'OVERDUE') => Promise<void>;
     getInvoice: (id: string) => Invoice | undefined;
+    duplicateInvoice: (id: string) => Promise<void>;
+    sendReminder: (id: string) => Promise<void>;
 
     // Product Actions
     addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
     deleteProduct: (id: string) => Promise<void>;
+
+    // Client Actions
+    addClient: (client: Omit<Client, 'id'>) => Promise<void>;
+    updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
+    deleteClient: (id: string) => Promise<void>;
 
     // Auth Actions
     signIn: (email: string, password: string) => Promise<void>;
@@ -48,11 +56,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     isLoading: true,
     invoices: [],
     products: [],
+    clients: [],
 
     initialize: () => {
         let unsubscribeProfile: (() => void) | null = null;
         let unsubscribeInvoices: (() => void) | null = null;
         let unsubscribeProducts: (() => void) | null = null;
+        let unsubscribeClients: (() => void) | null = null;
 
         // 1. Listen for Auth Changes
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -62,6 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (unsubscribeProfile) unsubscribeProfile();
             if (unsubscribeInvoices) unsubscribeInvoices();
             if (unsubscribeProducts) unsubscribeProducts();
+            if (unsubscribeClients) unsubscribeClients();
 
             if (user) {
                 // 2. Subscribe to User Profile
@@ -100,8 +111,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
                     set({ products });
                 });
+                // 5. Subscribe to Clients
+                const qClients = query(
+                    collection(db, `users/${user.uid}/clients`),
+                    orderBy('name', 'asc')
+                );
+
+                unsubscribeClients = onSnapshot(qClients, (snapshot) => {
+                    const clients = snapshot.docs.map(doc => ({
+                        ...doc.data(),
+                        id: doc.id
+                    })) as Client[];
+
+                    set({ clients });
+                });
             } else {
-                set({ invoices: [], products: [], userProfile: null });
+                set({ invoices: [], products: [], clients: [], userProfile: null });
             }
         });
 
@@ -111,6 +136,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (unsubscribeProfile) unsubscribeProfile();
             if (unsubscribeInvoices) unsubscribeInvoices();
             if (unsubscribeProducts) unsubscribeProducts();
+            if (unsubscribeClients) unsubscribeClients();
         };
     },
 
@@ -177,6 +203,81 @@ export const useAppStore = create<AppState>((set, get) => ({
             await deleteDoc(doc(db, `users/${user.uid}/products`, id));
         } catch (e) {
             console.error('Error deleting product:', e);
+        }
+    },
+
+    // Client Actions
+    addClient: async (client) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            await addDoc(collection(db, `users/${user.uid}/clients`), client);
+        } catch (e) {
+            console.error('Error adding client:', e);
+            throw e;
+        }
+    },
+
+    updateClient: async (id, updates) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            const docRef = doc(db, `users/${user.uid}/clients`, id);
+            await updateDoc(docRef, updates);
+        } catch (e) {
+            console.error('Error updating client:', e);
+        }
+    },
+
+    deleteClient: async (id) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            await deleteDoc(doc(db, `users/${user.uid}/clients`, id));
+        } catch (e) {
+            console.error('Error deleting client:', e);
+        }
+    },
+
+    duplicateInvoice: async (id) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            const invoice = get().invoices.find(inv => inv.id === id);
+            if (!invoice) throw new Error('Invoice not found');
+
+            const { id: _id, dateCreated, status, lastReminderSent, reminderCount, ...rest } = invoice;
+            const newInvoice: any = {
+                ...rest,
+                status: 'PENDING',
+                dateCreated: new Date().toISOString(),
+            };
+            // Remove undefined fields
+            Object.keys(newInvoice).forEach(key => {
+                if (newInvoice[key] === undefined) delete newInvoice[key];
+            });
+            await addDoc(collection(db, `users/${user.uid}/invoices`), newInvoice);
+        } catch (e) {
+            console.error('Error duplicating invoice:', e);
+            throw e;
+        }
+    },
+
+    sendReminder: async (id) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            const invoice = get().invoices.find(inv => inv.id === id);
+            if (!invoice) throw new Error('Invoice not found');
+
+            const docRef = doc(db, `users/${user.uid}/invoices`, id);
+            await updateDoc(docRef, {
+                lastReminderSent: new Date().toISOString(),
+                reminderCount: (invoice.reminderCount || 0) + 1,
+            });
+        } catch (e) {
+            console.error('Error sending reminder:', e);
+            throw e;
         }
     },
 

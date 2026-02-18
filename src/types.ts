@@ -1,5 +1,7 @@
 export type InvoiceStatus = 'PENDING' | 'PAID' | 'OVERDUE';
 
+export type RecurrenceInterval = 'weekly' | 'monthly' | 'yearly';
+
 export interface InvoiceItem {
     description: string;
     quantity: number;
@@ -11,6 +13,7 @@ export interface Invoice {
     clientName: string;
     clientEmail?: string;
     clientPhone?: string;
+    clientId?: string;
     items: InvoiceItem[];
     amount: number;
     dateCreated: string; // ISO String
@@ -19,8 +22,27 @@ export interface Invoice {
     notes?: string;
     invoiceNumber?: string;
 
+    // Recurrence
+    isRecurring?: boolean;
+    recurrenceInterval?: RecurrenceInterval;
+    nextRecurrenceDate?: string; // ISO String
+
+    // Reminders
+    lastReminderSent?: string; // ISO String
+    reminderCount?: number;
+
     // Legacy support (optional)
     serviceName?: string;
+}
+
+export interface Client {
+    id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    notes?: string;
+    createdAt: string; // ISO String
 }
 
 export interface Product {

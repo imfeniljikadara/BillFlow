@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,6 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { InvoiceCard } from '../../components/InvoiceCard';
 
 const { width } = Dimensions.get('window');
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function HomeScreen() {
     const router = useRouter();
@@ -42,20 +43,66 @@ export default function HomeScreen() {
         .sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime())
         .slice(0, 5);
 
-    // Chart Data
-    const chartData = {
-        labels: ["Jan", "Feb", "Mar", "Apr"],
-        datasets: [{
-            data: totalAmount > 0 ? [
-                Math.random() * totalAmount * 0.3,
-                Math.random() * totalAmount * 0.5,
-                Math.random() * totalAmount * 0.7,
-                totalAmount
-            ] : [0, 0, 0, 0],
-            color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
-            strokeWidth: 2
-        }]
-    };
+    // Calculate real monthly data for chart
+    const chartData = useMemo(() => {
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+        
+        // Get last 4 months of data
+        const monthlyData: { label: string; amount: number }[] = [];
+        for (let i = 3; i >= 0; i--) {
+            const d = new Date(thisYear, thisMonth - i, 1);
+            const m = d.getMonth();
+            const y = d.getFullYear();
+            const monthTotal = invoices
+                .filter(inv => {
+                    const invDate = new Date(inv.dateCreated);
+                    return invDate.getMonth() === m && invDate.getFullYear() === y;
+                })
+                .reduce((sum, inv) => sum + inv.amount, 0);
+            monthlyData.push({ label: monthNames[m], amount: monthTotal });
+        }
+
+        // Ensure we have valid data (at least some non-zero value or minimum for chart)
+        const amounts = monthlyData.map(d => d.amount);
+        const hasData = amounts.some(a => a > 0);
+
+        return {
+            labels: monthlyData.map(d => d.label),
+            datasets: [{
+                data: hasData ? amounts : [0, 0, 0, 0],
+                color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
+                strokeWidth: 2
+            }]
+        };
+    }, [invoices]);
+
+    // Calculate month-over-month growth
+    const growth = useMemo(() => {
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+        const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+        const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+
+        const thisMonthTotal = invoices
+            .filter(inv => {
+                const d = new Date(inv.dateCreated);
+                return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+            })
+            .reduce((sum, inv) => sum + inv.amount, 0);
+
+        const lastMonthTotal = invoices
+            .filter(inv => {
+                const d = new Date(inv.dateCreated);
+                return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+            })
+            .reduce((sum, inv) => sum + inv.amount, 0);
+
+        if (lastMonthTotal === 0) return thisMonthTotal > 0 ? 100 : 0;
+        return ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100);
+    }, [invoices]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -85,7 +132,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.headerBtn, { backgroundColor: colors.text, marginLeft: 12 }]}
-                        onPress={() => router.push('/invoices')}
+                        onPress={() => router.push('/(tabs)/invoices')}
                     >
                         <Feather name="file-text" size={20} color={colors.background} />
                     </TouchableOpacity>
@@ -118,9 +165,11 @@ export default function HomeScreen() {
                     <View style={[styles.mainCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.cardHeader}>
                             <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Total Revenue</Text>
-                            <View style={styles.trendBadge}>
-                                <Feather name="trending-up" size={12} color="#10B981" />
-                                <Text style={styles.trendText}>+12%</Text>
+                            <View style={[styles.trendBadge, { backgroundColor: growth >= 0 ? '#10B98115' : '#EF444415' }]}>
+                                <Feather name={growth >= 0 ? 'trending-up' : 'trending-down'} size={12} color={growth >= 0 ? '#10B981' : '#EF4444'} />
+                                <Text style={[styles.trendText, { color: growth >= 0 ? '#10B981' : '#EF4444' }]}>
+                                    {growth >= 0 ? '+' : ''}{growth.toFixed(0)}%
+                                </Text>
                             </View>
                         </View>
                         <Text style={[styles.bigAmount, { color: colors.text }]}>₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
@@ -161,7 +210,7 @@ export default function HomeScreen() {
                 <View style={styles.sectionHeader}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Invoices</Text>
                     {invoices.length > 0 && (
-                        <TouchableOpacity onPress={() => router.push('/invoices')}>
+                        <TouchableOpacity onPress={() => router.push('/(tabs)/invoices')}>
                             <Text style={[styles.seeAll, { color: colors.primary }]}>See all</Text>
                         </TouchableOpacity>
                     )}

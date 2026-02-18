@@ -20,9 +20,9 @@ export default function TabLayout() {
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.textSecondary,
                 tabBarLabelStyle: {
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: '500',
-                    marginTop: 4,
+                    marginTop: 2,
                 },
             }}
         >
@@ -36,20 +36,29 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
+                name="invoices"
+                options={{
+                    title: 'Invoices',
+                    tabBarIcon: ({ color, focused }) => (
+                        <Feather name="file-text" size={22} color={color} />
+                    ),
+                }}
+            />
+            <Tabs.Screen
                 name="products"
                 options={{
-                    title: 'Merchants',
+                    title: 'Inventory',
                     tabBarIcon: ({ color, focused }) => (
-                        <Feather name="shopping-bag" size={22} color={color} />
+                        <Feather name="package" size={22} color={color} />
                     ),
                 }}
             />
             <Tabs.Screen
                 name="analysis"
                 options={{
-                    title: 'Banking',
+                    title: 'Payments',
                     tabBarIcon: ({ color, focused }) => (
-                        <Ionicons name="business-outline" size={22} color={color} />
+                        <Feather name="dollar-sign" size={22} color={color} />
                     ),
                 }}
             />

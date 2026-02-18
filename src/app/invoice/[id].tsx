@@ -12,7 +12,7 @@ import { generateInvoicePDF } from '../../utils/pdfGenerator';
 export default function InvoiceDetailScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
-    const { invoices, updateInvoiceStatus, deleteInvoice, userProfile } = useAppStore();
+    const { invoices, updateInvoiceStatus, deleteInvoice, duplicateInvoice, sendReminder, userProfile } = useAppStore();
     const { isDark, colors } = useTheme();
     const [loading, setLoading] = useState(false);
     const [actionType, setActionType] = useState<string | null>(null);
@@ -99,6 +99,34 @@ export default function InvoiceDetailScreen() {
         );
     };
 
+    const handleDuplicate = async () => {
+        Alert.alert(
+            '📋 Duplicate Invoice',
+            `Create a copy of this invoice for ${invoice.clientName}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Duplicate',
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            setActionType('duplicate');
+                            await duplicateInvoice(invoice.id);
+                            Alert.alert('✓ Success', 'Invoice duplicated successfully!', [
+                                { text: 'OK', onPress: () => router.back() }
+                            ]);
+                        } catch (e) {
+                            Alert.alert('Error', 'Failed to duplicate invoice. Please try again.');
+                        } finally {
+                            setLoading(false);
+                            setActionType(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const handleShare = async () => {
         setLoading(true);
         setActionType('share');
@@ -155,6 +183,50 @@ export default function InvoiceDetailScreen() {
         }
     };
 
+    const handleSendReminder = async () => {
+        if (!invoice.clientPhone && !invoice.clientEmail) {
+            Alert.alert('No Contact', 'No phone or email available for this client.');
+            return;
+        }
+
+        Alert.alert(
+            '📬 Send Payment Reminder',
+            `Send a payment reminder to ${invoice.clientName}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Send',
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            setActionType('reminder');
+                            
+                            // Update reminder count in Firebase
+                            await sendReminder(invoice.id);
+                            
+                            // Send actual message
+                            const message = `Hi ${invoice.clientName},%0A%0AReminder: Your invoice of ₹${invoice.amount.toLocaleString()} is ${invoice.status}.%0A%0AInvoice #: ${invoice.id.slice(-8).toUpperCase()}%0ADue: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-IN') : 'Immediate'}%0A%0APlease make payment at your earliest convenience.%0A%0AThank you!%0A${userProfile?.businessName || ''}`;
+                            
+                            if (invoice.clientPhone) {
+                                const phone = invoice.clientPhone.replace(/\D/g, '');
+                                await Linking.openURL(`https://wa.me/${phone}?text=${message}`);
+                            } else if (invoice.clientEmail) {
+                                await Linking.openURL(`mailto:${invoice.clientEmail}?subject=Payment Reminder - ${userProfile?.businessName || 'Business'}&body=${message.replace(/%0A/g, '\n')}`);
+                            }
+                            
+                            Alert.alert('✓ Success', 'Payment reminder sent successfully!');
+                        } catch (e) {
+                            Alert.alert('Error', 'Failed to send reminder. Please try again.');
+                        } finally {
+                            setLoading(false);
+                            setActionType(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'PAID': return '#10B981';
@@ -193,6 +265,17 @@ export default function InvoiceDetailScreen() {
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Invoice Details</Text>
                 <View style={styles.headerActions}>
+                    <TouchableOpacity 
+                        onPress={handleDuplicate} 
+                        style={[styles.menuBtn, { backgroundColor: colors.inputBg, marginRight: 8 }]}
+                        disabled={loading}
+                    >
+                        {loading && actionType === 'duplicate' ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <Feather name="copy" size={18} color={colors.primary} />
+                        )}
+                    </TouchableOpacity>
                     <TouchableOpacity 
                         onPress={() => router.push(`/edit-invoice?id=${invoice.id}`)} 
                         style={[styles.menuBtn, { backgroundColor: colors.primary, marginRight: 8 }]}
@@ -264,7 +347,38 @@ export default function InvoiceDetailScreen() {
                         )}
                         <Text style={[styles.quickActionText, { color: colors.text }]}>Print</Text>
                     </TouchableOpacity>
+                    {invoice.status !== 'PAID' && (
+                        <TouchableOpacity
+                            style={[styles.quickAction, { backgroundColor: colors.card, borderColor: colors.border }]}
+                            onPress={handleSendReminder}
+                            disabled={loading}
+                        >
+                            {loading && actionType === 'reminder' ? (
+                                <ActivityIndicator size="small" color="#F59E0B" />
+                            ) : (
+                                <Feather name="bell" size={20} color="#F59E0B" />
+                            )}
+                            <Text style={[styles.quickActionText, { color: colors.text }]}>Remind</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
+
+                {/* Reminder History */}
+                {invoice.reminderCount && invoice.reminderCount > 0 && (
+                    <View style={[styles.reminderHistory, { backgroundColor: isDark ? colors.inputBg : '#FEF3C7', borderColor: '#F59E0B' }]}>
+                        <Feather name="bell" size={16} color="#F59E0B" />
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.reminderText, { color: colors.text }]}>
+                                {invoice.reminderCount} reminder{invoice.reminderCount > 1 ? 's' : ''} sent
+                            </Text>
+                            {invoice.lastReminderSent && (
+                                <Text style={[styles.reminderSubtext, { color: colors.textSecondary }]}>
+                                    Last sent: {new Date(invoice.lastReminderSent).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </Text>
+                            )}
+                        </View>
+                    </View>
+                )}
 
                 {/* Client Section */}
                 <View style={styles.section}>
@@ -339,6 +453,37 @@ export default function InvoiceDetailScreen() {
                         )}
                     </View>
                 </View>
+
+                {/* Recurring Invoice Info */}
+                {invoice.isRecurring && (
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>RECURRING INVOICE</Text>
+                        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <View style={styles.detailRow}>
+                                <Feather name="repeat" size={18} color={colors.primary} />
+                                <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Interval</Text>
+                                <Text style={[styles.detailValue, { color: colors.text }]}>
+                                    {invoice.recurrenceInterval?.charAt(0).toUpperCase() + invoice.recurrenceInterval?.slice(1)}
+                                </Text>
+                            </View>
+                            {invoice.nextRecurrenceDate && (
+                                <View style={[styles.detailRow, { marginTop: 12 }]}>
+                                    <Feather name="clock" size={18} color={colors.textSecondary} />
+                                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Next Invoice</Text>
+                                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                                        {formatDate(invoice.nextRecurrenceDate)}
+                                    </Text>
+                                </View>
+                            )}
+                            <View style={[styles.recurringNotice, { backgroundColor: isDark ? colors.inputBg : '#EFF6FF', marginTop: 14 }]}>
+                                <Feather name="info" size={14} color={colors.primary} />
+                                <Text style={[styles.recurringNoticeText, { color: colors.textSecondary }]}>
+                                    This invoice will be automatically duplicated based on the recurrence interval
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                )}
             </ScrollView>
 
             {/* Footer Actions */}
@@ -616,5 +761,35 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: '600',
+    },
+    reminderHistory: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 24,
+        marginBottom: 20,
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 12,
+    },
+    reminderText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    reminderSubtext: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    recurringNotice: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        padding: 12,
+        borderRadius: 10,
+        gap: 10,
+    },
+    recurringNoticeText: {
+        fontSize: 12,
+        flex: 1,
+        lineHeight: 18,
     },
 });

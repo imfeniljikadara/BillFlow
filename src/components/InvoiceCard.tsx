@@ -1,8 +1,9 @@
 import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppStore } from '../store/appStore';
 import { Invoice } from '../types';
 
 interface InvoiceCardProps {
@@ -13,6 +14,7 @@ interface InvoiceCardProps {
 export const InvoiceCard = ({ invoice, index = 0 }: InvoiceCardProps) => {
     const router = useRouter();
     const { colors, isDark } = useTheme();
+    const { duplicateInvoice } = useAppStore();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -57,11 +59,40 @@ export const InvoiceCard = ({ invoice, index = 0 }: InvoiceCardProps) => {
 
     const statusColor = getStatusColor(invoice.status);
 
+    const handleLongPress = () => {
+        Alert.alert(
+            'Invoice Actions',
+            `What would you like to do with this invoice for ${invoice.clientName}?`,
+            [
+                {
+                    text: 'Duplicate Invoice',
+                    onPress: async () => {
+                        try {
+                            await duplicateInvoice(invoice.id);
+                            Alert.alert('✓ Success', 'Invoice duplicated successfully!');
+                        } catch (e) {
+                            Alert.alert('Error', 'Failed to duplicate invoice');
+                        }
+                    }
+                },
+                {
+                    text: 'View Details',
+                    onPress: () => router.push(`/invoice/${invoice.id}`)
+                },
+                {
+                    text: 'Cancel',
+                    style: 'cancel'
+                }
+            ]
+        );
+    };
+
     return (
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
             <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => router.push(`/invoice/${invoice.id}`)}
+                onLongPress={handleLongPress}
                 style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
                 <View style={styles.header}>
@@ -85,11 +116,21 @@ export const InvoiceCard = ({ invoice, index = 0 }: InvoiceCardProps) => {
 
                 {/* Footer / Status Line */}
                 <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : colors.surface }]}>
-                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
-                        <Feather name={getStatusIcon(invoice.status) as any} size={12} color={statusColor} />
-                        <Text style={[styles.statusText, { color: statusColor }]}>
-                            {invoice.status}
-                        </Text>
+                    <View style={styles.badgesRow}>
+                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
+                            <Feather name={getStatusIcon(invoice.status) as any} size={12} color={statusColor} />
+                            <Text style={[styles.statusText, { color: statusColor }]}>
+                                {invoice.status}
+                            </Text>
+                        </View>
+                        {invoice.isRecurring && (
+                            <View style={[styles.recurringBadge, { backgroundColor: colors.primary + '15' }]}>
+                                <Feather name="repeat" size={11} color={colors.primary} />
+                                <Text style={[styles.recurringText, { color: colors.primary }]}>
+                                    {invoice.recurrenceInterval?.toUpperCase().slice(0, 3)}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     <Feather name="chevron-right" size={16} color={colors.textSecondary} />
                 </View>
@@ -152,6 +193,11 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderTopWidth: 1,
     },
+    badgesRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     statusBadge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -163,5 +209,18 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 11,
         fontWeight: '600',
+    },
+    recurringBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 7,
+        paddingVertical: 4,
+        borderRadius: 6,
+        gap: 4,
+    },
+    recurringText: {
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
 });

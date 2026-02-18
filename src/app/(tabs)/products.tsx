@@ -45,9 +45,15 @@ export default function ProductsScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Products Library</Text>
-                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Save items to reuse in invoices</Text>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Inventory</Text>
+                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Manage your products and services</Text>
                 </View>
+                <TouchableOpacity
+                    style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => setModalVisible(true)}
+                >
+                    <Feather name="plus" size={22} color="#FFF" />
+                </TouchableOpacity>
             </View>
 
             {/* Stats Cards */}
@@ -70,7 +76,7 @@ export default function ProductsScreen() {
 
             {/* Product List Header */}
             <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Products</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Items</Text>
             </View>
 
             {/* Product List */}
@@ -108,11 +114,6 @@ export default function ProductsScreen() {
                     </TouchableOpacity>
                 )}
             />
-
-            {/* Floating Add Button */}
-            <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-                <Feather name="plus" size={24} color="#FFF" />
-            </TouchableOpacity>
 
             {/* Add Product Modal */}
             <Modal
@@ -171,8 +172,18 @@ const styles = StyleSheet.create({
         paddingTop: 60,
     },
     header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: 24,
         paddingBottom: 20,
+    },
+    addBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     headerTitle: {
         fontSize: 28,
@@ -278,22 +289,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: 'center',
         lineHeight: 22,
-    },
-    fab: {
-        position: 'absolute',
-        bottom: 110,
-        right: 24,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#2563EB',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#2563EB',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 5,
     },
     modalOverlay: {
         flex: 1,
