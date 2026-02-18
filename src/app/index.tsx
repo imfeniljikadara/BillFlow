@@ -12,20 +12,15 @@ export default function AuthDispatcher() {
     useEffect(() => {
         if (isLoading) return;
 
-        if (user) {
-            // User is logged in
-            if (userProfile?.onboardingComplete) {
-                router.replace('/(tabs)');
-            } else if (userProfile) { // Profile exists but flag missing check
-                if (userProfile.onboardingComplete) router.replace('/(tabs)');
-                else router.replace('/onboarding');
-            } else {
-                // No profile yet, go to onboarding to set name
-                router.replace('/onboarding');
-            }
-        } else {
+        if (!user) {
             // No user, go to login
             router.replace('/login');
+        } else if (userProfile?.onboardingComplete) {
+            // User has completed onboarding
+            router.replace('/(tabs)');
+        } else {
+            // User exists but hasn't completed onboarding
+            router.replace('/onboarding');
         }
     }, [user, userProfile, isLoading]);
 

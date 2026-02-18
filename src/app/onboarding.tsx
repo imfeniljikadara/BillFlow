@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -26,7 +26,7 @@ const SLIDES = [
     {
         id: 'setup',
         title: 'Setup Your Business',
-        subtitle: 'Enter details to appear on your invoices.',
+        subtitle: 'Enter your business name to get started. You can add payment details later.',
         icon: 'briefcase',
         color: '#8B5CF6'
     }
@@ -36,12 +36,20 @@ export default function OnboardingScreen() {
     const router = useRouter();
     const [currentIndex, setCurrentIndex] = useState(0);
     const flatListRef = useRef<FlatList>(null);
-    const { user } = useAppStore();
+    const { user, userProfile } = useAppStore();
 
-    // Form State
+    // Form State — pre-fill from existing profile if available
     const [businessName, setBusinessName] = useState('');
     const [upiId, setUpiId] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Pre-fill from existing profile data (prevents re-entry for returning users)
+    useEffect(() => {
+        if (userProfile) {
+            if (userProfile.businessName) setBusinessName(userProfile.businessName);
+            if (userProfile.upiId) setUpiId(userProfile.upiId);
+        }
+    }, [userProfile]);
 
     const handleNext = () => {
         if (currentIndex < SLIDES.length - 1) {
@@ -52,8 +60,8 @@ export default function OnboardingScreen() {
     };
 
     const handleFinish = async () => {
-        if (!businessName || !upiId) {
-            Alert.alert('Required', 'Please enter Business Name and UPI ID');
+        if (!businessName.trim()) {
+            Alert.alert('Required', 'Please enter your Business Name to continue.');
             return;
         }
 
@@ -61,18 +69,22 @@ export default function OnboardingScreen() {
         try {
             const currentUser = auth.currentUser;
             if (currentUser) {
-                await setDoc(doc(db, 'users', currentUser.uid), {
-                    businessName,
-                    upiId,
+                const profileData: any = {
+                    businessName: businessName.trim(),
                     onboardingComplete: true,
-                    updatedAt: new Date().toISOString()
-                }, { merge: true });
+                    updatedAt: new Date().toISOString(),
+                };
+                // Only set UPI ID if provided
+                if (upiId.trim()) {
+                    profileData.upiId = upiId.trim();
+                }
+                await setDoc(doc(db, 'users', currentUser.uid), profileData, { merge: true });
             }
 
             router.replace('/(tabs)');
         } catch (e) {
             console.error(e);
-            Alert.alert('Error', 'Save failed. Please check internet.');
+            Alert.alert('Error', 'Save failed. Please check your internet connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -90,7 +102,7 @@ export default function OnboardingScreen() {
 
                     <View style={styles.form}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>BUSINESS NAME</Text>
+                            <Text style={styles.label}>BUSINESS NAME *</Text>
                             <View style={styles.inputWrapper}>
                                 <Feather name="briefcase" size={18} color="#9CA3AF" />
                                 <TextInput
@@ -104,7 +116,7 @@ export default function OnboardingScreen() {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>UPI ID</Text>
+                            <Text style={styles.label}>UPI ID (Optional)</Text>
                             <View style={styles.inputWrapper}>
                                 <Feather name="at-sign" size={18} color="#9CA3AF" />
                                 <TextInput
@@ -116,6 +128,9 @@ export default function OnboardingScreen() {
                                     autoCapitalize="none"
                                 />
                             </View>
+                            <Text style={styles.helperText}>
+                                You can add or update this later in Payment Details
+                            </Text>
                         </View>
                     </View>
                 </View>
@@ -257,6 +272,12 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         fontWeight: '600',
         letterSpacing: 0.5,
+    },
+    helperText: {
+        color: '#9CA3AF',
+        fontSize: 12,
+        marginTop: 6,
+        fontStyle: 'italic',
     },
     inputWrapper: {
         flexDirection: 'row',

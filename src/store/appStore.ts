@@ -66,8 +66,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         // 1. Listen for Auth Changes
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-            set({ user, isLoading: false });
-
             // Clean up previous subscriptions when auth state changes
             if (unsubscribeProfile) unsubscribeProfile();
             if (unsubscribeInvoices) unsubscribeInvoices();
@@ -75,10 +73,16 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (unsubscribeClients) unsubscribeClients();
 
             if (user) {
-                // 2. Subscribe to User Profile
+                // Set user but keep isLoading true until profile is fetched
+                set({ user });
+
+                // 2. Subscribe to User Profile — this resolves isLoading
                 unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
                     if (docSnap.exists()) {
-                        set({ userProfile: docSnap.data() as UserProfile });
+                        set({ userProfile: docSnap.data() as UserProfile, isLoading: false });
+                    } else {
+                        // Profile document doesn't exist yet (new user)
+                        set({ userProfile: null, isLoading: false });
                     }
                 });
 
@@ -126,7 +130,8 @@ export const useAppStore = create<AppState>((set, get) => ({
                     set({ clients });
                 });
             } else {
-                set({ invoices: [], products: [], clients: [], userProfile: null });
+                // No user — clear everything and stop loading
+                set({ user: null, invoices: [], products: [], clients: [], userProfile: null, isLoading: false });
             }
         });
 
@@ -303,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     signOut: async () => {
         try {
             await signOut(auth);
-            set({ user: null, userProfile: null, invoices: [], products: [] });
+            set({ user: null, userProfile: null, invoices: [], products: [], clients: [] });
         } catch (e) {
             console.error('Error signing out:', e);
         }

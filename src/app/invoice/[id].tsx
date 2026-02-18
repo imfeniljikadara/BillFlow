@@ -200,20 +200,20 @@ export default function InvoiceDetailScreen() {
                         try {
                             setLoading(true);
                             setActionType('reminder');
-                            
+
                             // Update reminder count in Firebase
                             await sendReminder(invoice.id);
-                            
+
                             // Send actual message
                             const message = `Hi ${invoice.clientName},%0A%0AReminder: Your invoice of ₹${invoice.amount.toLocaleString()} is ${invoice.status}.%0A%0AInvoice #: ${invoice.id.slice(-8).toUpperCase()}%0ADue: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-IN') : 'Immediate'}%0A%0APlease make payment at your earliest convenience.%0A%0AThank you!%0A${userProfile?.businessName || ''}`;
-                            
+
                             if (invoice.clientPhone) {
                                 const phone = invoice.clientPhone.replace(/\D/g, '');
                                 await Linking.openURL(`https://wa.me/${phone}?text=${message}`);
                             } else if (invoice.clientEmail) {
                                 await Linking.openURL(`mailto:${invoice.clientEmail}?subject=Payment Reminder - ${userProfile?.businessName || 'Business'}&body=${message.replace(/%0A/g, '\n')}`);
                             }
-                            
+
                             Alert.alert('✓ Success', 'Payment reminder sent successfully!');
                         } catch (e) {
                             Alert.alert('Error', 'Failed to send reminder. Please try again.');
@@ -265,8 +265,8 @@ export default function InvoiceDetailScreen() {
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Invoice Details</Text>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity 
-                        onPress={handleDuplicate} 
+                    <TouchableOpacity
+                        onPress={handleDuplicate}
                         style={[styles.menuBtn, { backgroundColor: colors.inputBg, marginRight: 8 }]}
                         disabled={loading}
                     >
@@ -276,8 +276,8 @@ export default function InvoiceDetailScreen() {
                             <Feather name="copy" size={18} color={colors.primary} />
                         )}
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                        onPress={() => router.push(`/edit-invoice?id=${invoice.id}`)} 
+                    <TouchableOpacity
+                        onPress={() => router.push(`/edit-invoice?id=${invoice.id}`)}
                         style={[styles.menuBtn, { backgroundColor: colors.primary, marginRight: 8 }]}
                     >
                         <Feather name="edit-2" size={18} color="#FFF" />
@@ -463,7 +463,7 @@ export default function InvoiceDetailScreen() {
                                 <Feather name="repeat" size={18} color={colors.primary} />
                                 <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Interval</Text>
                                 <Text style={[styles.detailValue, { color: colors.text }]}>
-                                    {invoice.recurrenceInterval?.charAt(0).toUpperCase() + invoice.recurrenceInterval?.slice(1)}
+                                    {(invoice.recurrenceInterval || 'monthly').charAt(0).toUpperCase() + (invoice.recurrenceInterval || 'monthly').slice(1)}
                                 </Text>
                             </View>
                             {invoice.nextRecurrenceDate && (
@@ -765,7 +765,6 @@ const styles = StyleSheet.create({
     reminderHistory: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: 24,
         marginBottom: 20,
         padding: 14,
         borderRadius: 12,
