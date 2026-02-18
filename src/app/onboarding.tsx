@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, TextInp
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAppStore } from '../store/appStore';
+import { useTheme } from '../contexts/ThemeContext';
 import { auth, db } from '../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 
@@ -34,6 +35,7 @@ const SLIDES = [
 
 export default function OnboardingScreen() {
     const router = useRouter();
+    const { isDark, colors } = useTheme();
     const [currentIndex, setCurrentIndex] = useState(0);
     const flatListRef = useRef<FlatList>(null);
     const { user, userProfile } = useAppStore();
@@ -155,14 +157,14 @@ export default function OnboardingScreen() {
     }).current;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Skip Button */}
             {currentIndex < SLIDES.length - 1 && (
                 <TouchableOpacity
                     style={styles.skipBtn}
                     onPress={() => flatListRef.current?.scrollToIndex({ index: SLIDES.length - 1 })}
                 >
-                    <Text style={styles.skipText}>Skip</Text>
+                    <Text style={[styles.skipText, { color: colors.textSecondary }]}>Skip</Text>
                 </TouchableOpacity>
             )}
 
@@ -219,7 +221,6 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
     },
     skipBtn: {
         position: 'absolute',
@@ -248,14 +249,12 @@ const styles = StyleSheet.create({
     },
     slideTitle: {
         fontSize: 28,
-        color: '#1E1E1E',
         fontWeight: '700',
         textAlign: 'center',
         marginBottom: 12,
     },
     slideSubtitle: {
         fontSize: 16,
-        color: '#6B7280',
         textAlign: 'center',
         lineHeight: 24,
     },

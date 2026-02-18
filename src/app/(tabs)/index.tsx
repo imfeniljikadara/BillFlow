@@ -13,7 +13,7 @@ const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 
 export default function HomeScreen() {
     const router = useRouter();
-    const { invoices, userProfile } = useAppStore();
+    const { invoices, userProfile, refreshData } = useAppStore();
     const { isDark, colors } = useTheme();
     const [refreshing, setRefreshing] = useState(false);
 
@@ -48,7 +48,7 @@ export default function HomeScreen() {
         const now = new Date();
         const thisMonth = now.getMonth();
         const thisYear = now.getFullYear();
-        
+
         // Get last 4 months of data
         const monthlyData: { label: string; amount: number }[] = [];
         for (let i = 3; i >= 0; i--) {
@@ -104,10 +104,11 @@ export default function HomeScreen() {
         return ((thisMonthTotal - lastMonthTotal) / lastMonthTotal * 100);
     }, [invoices]);
 
-    const onRefresh = useCallback(() => {
+    const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        setTimeout(() => setRefreshing(false), 1000);
-    }, []);
+        await refreshData();
+        setRefreshing(false);
+    }, [refreshData]);
 
     // getStatusColor replaced by InvoiceCard internal logic
 
@@ -442,63 +443,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         marginBottom: 24,
     },
-    invoiceCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 18,
-        marginBottom: 10,
-        borderWidth: 1,
-    },
-    invoiceAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    invoiceAvatarText: {
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    invoiceInfo: {
-        flex: 1,
-        marginLeft: 14,
-    },
-    invoiceName: {
-        fontSize: 15,
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    invoiceDate: {
-        fontSize: 13,
-    },
-    invoiceRight: {
-        alignItems: 'flex-end',
-    },
-    invoiceAmount: {
-        fontSize: 16,
-        fontWeight: '700',
-        marginBottom: 6,
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        gap: 4,
-    },
-    statusDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-    },
-    statusText: {
-        fontSize: 11,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-    },
+
     actionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',

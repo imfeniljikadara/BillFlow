@@ -10,7 +10,7 @@ const { width } = Dimensions.get('window');
 
 export default function AnalyticsScreen() {
     const router = useRouter();
-    const { invoices, clients } = useAppStore();
+    const { invoices, clients, refreshData } = useAppStore();
     const { isDark, colors } = useTheme();
     const [refreshing, setRefreshing] = useState(false);
 
@@ -109,9 +109,10 @@ export default function AnalyticsScreen() {
         };
     }, [invoices, clients]);
 
-    const onRefresh = () => {
+    const onRefresh = async () => {
         setRefreshing(true);
-        setTimeout(() => setRefreshing(false), 1000);
+        await refreshData();
+        setRefreshing(false);
     };
 
     const formatCurrency = (amount: number) => {
@@ -155,7 +156,7 @@ export default function AnalyticsScreen() {
                     </View>
                     <Text style={styles.revenueAmount}>₹{analytics.totalCollected.toLocaleString('en-IN')}</Text>
                     <Text style={styles.revenueSubtext}>of ₹{analytics.totalInvoiced.toLocaleString('en-IN')} invoiced</Text>
-                    
+
                     {/* Progress Bar */}
                     <View style={styles.progressContainer}>
                         <View style={styles.progressBar}>
@@ -205,19 +206,19 @@ export default function AnalyticsScreen() {
                 <View style={[styles.chartCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Text style={[styles.chartTitle, { color: colors.text }]}>Monthly Overview</Text>
                     <Text style={[styles.chartSubtitle, { color: colors.textSecondary }]}>Last 6 months revenue</Text>
-                    
+
                     <View style={styles.barChart}>
                         {analytics.monthlyData.map((data, index) => (
                             <View key={index} style={styles.barContainer}>
                                 <View style={styles.barWrapper}>
-                                    <View 
+                                    <View
                                         style={[
-                                            styles.bar, 
-                                            { 
+                                            styles.bar,
+                                            {
                                                 height: `${(data.amount / analytics.maxMonthlyAmount) * 100}%`,
                                                 backgroundColor: index === 5 ? colors.primary : `${colors.primary}40`,
                                             }
-                                        ]} 
+                                        ]}
                                     />
                                 </View>
                                 <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{data.month}</Text>
@@ -232,7 +233,7 @@ export default function AnalyticsScreen() {
                 {/* Key Metrics */}
                 <View style={[styles.metricsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <Text style={[styles.chartTitle, { color: colors.text }]}>Key Metrics</Text>
-                    
+
                     <View style={styles.metricRow}>
                         <View style={styles.metricLeft}>
                             <Feather name="file-text" size={18} color={colors.primary} />
@@ -240,7 +241,7 @@ export default function AnalyticsScreen() {
                         </View>
                         <Text style={[styles.metricValue, { color: colors.text }]}>₹{analytics.avgInvoice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</Text>
                     </View>
-                    
+
                     <View style={[styles.metricRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }]}>
                         <View style={styles.metricLeft}>
                             <Feather name="calendar" size={18} color={colors.primary} />
@@ -248,7 +249,7 @@ export default function AnalyticsScreen() {
                         </View>
                         <Text style={[styles.metricValue, { color: colors.text }]}>₹{analytics.thisMonthTotal.toLocaleString('en-IN')}</Text>
                     </View>
-                    
+
                     <View style={[styles.metricRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }]}>
                         <View style={styles.metricLeft}>
                             <Feather name="users" size={18} color={colors.primary} />
@@ -256,7 +257,7 @@ export default function AnalyticsScreen() {
                         </View>
                         <Text style={[styles.metricValue, { color: colors.text }]}>{analytics.totalClients}</Text>
                     </View>
-                    
+
                     <View style={[styles.metricRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 16 }]}>
                         <View style={styles.metricLeft}>
                             <Feather name="percent" size={18} color={colors.primary} />
@@ -277,7 +278,7 @@ export default function AnalyticsScreen() {
                                 <Text style={[styles.seeAllText, { color: colors.primary }]}>See all</Text>
                             </TouchableOpacity>
                         </View>
-                        
+
                         {analytics.topClients.map((client, index) => (
                             <View key={client.name} style={[styles.clientRow, index > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
                                 <View style={[styles.clientRank, { backgroundColor: index === 0 ? '#F59E0B15' : colors.inputBg }]}>

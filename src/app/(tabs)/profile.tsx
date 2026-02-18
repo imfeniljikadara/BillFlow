@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -15,13 +15,26 @@ export default function ProfileScreen() {
         { label: 'Business Profile', icon: 'briefcase', route: '/onboarding' },
         { label: 'Payment Details', icon: 'credit-card', route: '/payment-details' },
         { label: 'Product Library', icon: 'package', route: '/(tabs)/products' },
-        { label: 'Invoice History', icon: 'file-text', route: null },
-        { label: 'Notification Settings', icon: 'bell', route: null },
+        { label: 'Invoice History', icon: 'file-text', route: '/(tabs)/invoices' },
+        { label: 'Notification Settings', icon: 'bell', route: null as string | null },
     ];
 
     const handleLogout = async () => {
         await signOut();
         router.replace('/login');
+    };
+
+    const handleMenuPress = (item: { label: string; route: string | null }) => {
+        if (item.route) {
+            router.push(item.route as any);
+        } else {
+            // Coming soon features
+            Alert.alert(
+                '🚧 Coming Soon',
+                `${item.label} will be available in a future update.`,
+                [{ text: 'OK' }]
+            );
+        }
     };
 
     return (
@@ -41,10 +54,13 @@ export default function ProfileScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                         <Text style={[styles.name, { color: colors.text }]}>{userProfile?.businessName || 'Business Name'}</Text>
-                        <Text style={styles.plan}>Premium Plan</Text>
+                        <Text style={styles.plan}>{userProfile?.isPro ? 'Pro Plan' : 'Free Plan'}</Text>
                     </View>
-                    <TouchableOpacity style={styles.editBtn}>
-                        <Text style={styles.editBtnText}>Edit</Text>
+                    <TouchableOpacity
+                        style={[styles.editBtn, { backgroundColor: colors.text }]}
+                        onPress={() => router.push('/onboarding')}
+                    >
+                        <Text style={[styles.editBtnText, { color: colors.background }]}>Edit</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -55,7 +71,7 @@ export default function ProfileScreen() {
                         <TouchableOpacity
                             key={index}
                             style={[styles.menuItem, index === menuItems.length - 1 && { borderBottomWidth: 0 }, { borderBottomColor: colors.border }]}
-                            onPress={() => item.route && router.push(item.route as any)}
+                            onPress={() => handleMenuPress(item)}
                         >
                             <View style={[styles.menuIconBox, { backgroundColor: colors.inputBg }]}>
                                 <Feather name={item.icon as any} size={18} color={colors.textSecondary} />

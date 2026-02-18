@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { auth, db } from '../config/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import QRCode from 'react-native-qrcode-svg';
+import { useAppStore } from '../store/appStore';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function PaymentDetailsScreen() {
     const router = useRouter();
+    const { userProfile } = useAppStore();
+    const { isDark, colors } = useTheme();
     const [loading, setLoading] = useState(false);
 
-    // Form State
+    // Form State — pre-filled from Zustand store (already synced from Firestore)
     const [businessName, setBusinessName] = useState('');
     const [upiId, setUpiId] = useState('');
     const [bankName, setBankName] = useState('');
@@ -20,38 +24,20 @@ export default function PaymentDetailsScreen() {
     const [panNumber, setPanNumber] = useState('');
     const [gstNumber, setGstNumber] = useState('');
 
+    // Pre-fill from live userProfile in store
     useEffect(() => {
-        loadUserData();
-    }, []);
-
-    const loadUserData = async () => {
-        try {
-            const currentUser = auth.currentUser;
-            if (currentUser) {
-                const docRef = doc(db, 'users', currentUser.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    setBusinessName(data.businessName || '');
-                    setUpiId(data.upiId || '');
-                    setBankName(data.bankName || '');
-                    setAccountNumber(data.accountNumber || '');
-                    setIfscCode(data.ifscCode || '');
-                    setPanNumber(data.panNumber || '');
-                    setGstNumber(data.gstNumber || '');
-                }
-            }
-        } catch (e) {
-            console.error(e);
+        if (userProfile) {
+            setBusinessName(userProfile.businessName || '');
+            setUpiId(userProfile.upiId || '');
+            setBankName(userProfile.bankName || '');
+            setAccountNumber(userProfile.accountNumber || '');
+            setIfscCode(userProfile.ifscCode || '');
+            setPanNumber(userProfile.panNumber || '');
+            setGstNumber(userProfile.gstNumber || '');
         }
-    };
+    }, [userProfile]);
 
     const handleSave = async () => {
-        if (!upiId) {
-            Alert.alert('Required', 'Please enter UPI ID');
-            return;
-        }
-
         setLoading(true);
         try {
             const currentUser = auth.currentUser;
@@ -67,7 +53,7 @@ export default function PaymentDetailsScreen() {
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
 
-                Alert.alert('Saved', 'Payment details updated successfully!');
+                Alert.alert('✅ Saved', 'Payment details updated successfully!');
             }
         } catch (e) {
             console.error(e);
@@ -80,46 +66,73 @@ export default function PaymentDetailsScreen() {
     const upiUrl = upiId ? `upi://pay?pa=${upiId}&pn=${encodeURIComponent(businessName)}&cu=INR` : '';
 
     return (
-        <View style={styles.container}>
-            <StatusBar style="dark" />
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
 
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                    <Feather name="arrow-left" size={22} color="#1E1E1E" />
+            <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+                <TouchableOpacity
+                    onPress={() => router.back()}
+                    style={[styles.backBtn, { backgroundColor: colors.inputBg }]}
+                >
+                    <Feather name="arrow-left" size={22} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Payment Details</Text>
-                <View style={{ width: 40 }} />
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Payment Details</Text>
+                <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 {/* UPI QR Code Card */}
-                {upiId && (
-                    <View style={styles.qrCard}>
-                        <View style={styles.qrContainer}>
+                {upiId ? (
+                    <View style={[styles.qrCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={[styles.qrContainer, { borderColor: colors.primary }]}>
                             <QRCode
                                 value={upiUrl}
                                 size={140}
-                                backgroundColor="#FFFFFF"
+                                backgroundColor={isDark ? colors.card : '#FFFFFF'}
+                                color={isDark ? colors.text : '#000000'}
                             />
                         </View>
-                        <Text style={styles.qrLabel}>Scan to Pay</Text>
-                        <Text style={styles.qrUpi}>{upiId}</Text>
+                        <Text style={[styles.qrLabel, { color: colors.textSecondary }]}>Scan to Pay</Text>
+                        <Text style={[styles.qrUpi, { color: colors.text }]}>{upiId}</Text>
+                    </View>
+                ) : (
+                    <View style={[styles.qrPlaceholder, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <View style={[styles.qrPlaceholderIcon, { backgroundColor: colors.inputBg }]}>
+                            <Feather name="at-sign" size={32} color={colors.textSecondary} />
+                        </View>
+                        <Text style={[styles.qrPlaceholderText, { color: colors.textSecondary }]}>
+                            Enter your UPI ID below to generate a payment QR code
+                        </Text>
                     </View>
                 )}
 
                 {/* UPI Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>UPI Details</Text>
-                    <View style={styles.card}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>UPI Details</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>UPI ID</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="at-sign" size={18} color="#9CA3AF" />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>BUSINESS NAME</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="briefcase" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
+                                    placeholder="Your Business Name"
+                                    placeholderTextColor={colors.textSecondary}
+                                    value={businessName}
+                                    onChangeText={setBusinessName}
+                                />
+                            </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>UPI ID</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="at-sign" size={18} color={colors.textSecondary} />
+                                <TextInput
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="yourname@upi"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={upiId}
                                     onChangeText={setUpiId}
                                     autoCapitalize="none"
@@ -131,16 +144,16 @@ export default function PaymentDetailsScreen() {
 
                 {/* Bank Details Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Bank Details (Optional)</Text>
-                    <View style={styles.card}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Bank Details (Optional)</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>BANK NAME</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="home" size={18} color="#9CA3AF" />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>BANK NAME</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="home" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="HDFC Bank"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={bankName}
                                     onChangeText={setBankName}
                                 />
@@ -148,13 +161,13 @@ export default function PaymentDetailsScreen() {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>ACCOUNT NUMBER</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="hash" size={18} color="#9CA3AF" />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>ACCOUNT NUMBER</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="hash" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="1234567890"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={accountNumber}
                                     onChangeText={setAccountNumber}
                                     keyboardType="numeric"
@@ -163,13 +176,13 @@ export default function PaymentDetailsScreen() {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>IFSC CODE</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="code" size={18} color="#9CA3AF" />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>IFSC CODE</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="code" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="HDFC0001234"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={ifscCode}
                                     onChangeText={setIfscCode}
                                     autoCapitalize="characters"
@@ -181,16 +194,16 @@ export default function PaymentDetailsScreen() {
 
                 {/* Tax Details Section */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Tax Details (Optional)</Text>
-                    <View style={styles.card}>
+                    <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Tax Details (Optional)</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>PAN NUMBER</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="credit-card" size={18} color="#9CA3AF" />
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>PAN NUMBER</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="credit-card" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="ABCDE1234F"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={panNumber}
                                     onChangeText={setPanNumber}
                                     autoCapitalize="characters"
@@ -199,14 +212,14 @@ export default function PaymentDetailsScreen() {
                             </View>
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>GSTIN</Text>
-                            <View style={styles.inputWrapper}>
-                                <Feather name="file-text" size={18} color="#9CA3AF" />
+                        <View style={[styles.inputGroup, { marginBottom: 0 }]}>
+                            <Text style={[styles.label, { color: colors.textSecondary }]}>GSTIN</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                                <Feather name="file-text" size={18} color={colors.textSecondary} />
                                 <TextInput
-                                    style={styles.input}
+                                    style={[styles.input, { color: colors.text }]}
                                     placeholder="22AAAAA0000A1Z5"
-                                    placeholderTextColor="#9CA3AF"
+                                    placeholderTextColor={colors.textSecondary}
                                     value={gstNumber}
                                     onChangeText={setGstNumber}
                                     autoCapitalize="characters"
@@ -217,14 +230,24 @@ export default function PaymentDetailsScreen() {
                     </View>
                 </View>
 
-                <View style={{ height: 100 }} />
+                <View style={{ height: 120 }} />
             </ScrollView>
 
             {/* Save Button */}
-            <View style={styles.footer}>
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={loading}>
-                    <Text style={styles.saveBtnText}>{loading ? 'Saving...' : 'Save Details'}</Text>
-                    <Feather name="check" size={20} color="#FFF" />
+            <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+                <TouchableOpacity
+                    style={[styles.saveBtn, { backgroundColor: colors.primary }, loading && styles.saveBtnDisabled]}
+                    onPress={handleSave}
+                    disabled={loading}
+                >
+                    {loading ? (
+                        <ActivityIndicator color="#FFF" />
+                    ) : (
+                        <>
+                            <Feather name="check" size={20} color="#FFF" />
+                            <Text style={styles.saveBtnText}>Save Details</Text>
+                        </>
+                    )}
                 </TouchableOpacity>
             </View>
         </View>
@@ -234,7 +257,6 @@ export default function PaymentDetailsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F9FAFB',
     },
     header: {
         flexDirection: 'row',
@@ -243,76 +265,83 @@ const styles = StyleSheet.create({
         paddingTop: 60,
         paddingHorizontal: 24,
         paddingBottom: 20,
-        backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
     },
     backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: '#F9FAFB',
+        width: 44,
+        height: 44,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
     },
     headerTitle: {
         fontSize: 18,
-        color: '#1E1E1E',
         fontWeight: '600',
     },
     content: {
         padding: 24,
     },
     qrCard: {
-        backgroundColor: '#FFFFFF',
         borderRadius: 24,
         padding: 28,
         alignItems: 'center',
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: '#F3F4F6',
     },
     qrContainer: {
         padding: 16,
-        backgroundColor: '#FFFFFF',
         borderRadius: 16,
         borderWidth: 2,
-        borderColor: '#2563EB',
     },
     qrLabel: {
         marginTop: 16,
         fontSize: 14,
-        color: '#6B7280',
     },
     qrUpi: {
         marginTop: 4,
         fontSize: 16,
-        color: '#1E1E1E',
         fontWeight: '600',
+    },
+    qrPlaceholder: {
+        borderRadius: 24,
+        padding: 28,
+        alignItems: 'center',
+        marginBottom: 24,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+    },
+    qrPlaceholderIcon: {
+        width: 72,
+        height: 72,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    qrPlaceholderText: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
     },
     section: {
         marginBottom: 24,
     },
     sectionTitle: {
-        fontSize: 14,
-        color: '#6B7280',
+        fontSize: 12,
         fontWeight: '600',
         marginBottom: 10,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     card: {
-        backgroundColor: '#FFFFFF',
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,
-        borderColor: '#F3F4F6',
     },
     inputGroup: {
         marginBottom: 16,
     },
     label: {
-        color: '#6B7280',
         fontSize: 11,
         marginBottom: 8,
         fontWeight: '600',
@@ -321,17 +350,14 @@ const styles = StyleSheet.create({
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F9FAFB',
         borderRadius: 12,
         paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: '#E5E7EB',
         gap: 10,
     },
     input: {
         flex: 1,
         paddingVertical: 14,
-        color: '#1E1E1E',
         fontSize: 15,
     },
     footer: {
@@ -339,9 +365,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: '#FFFFFF',
         borderTopWidth: 1,
-        borderTopColor: '#F3F4F6',
         padding: 24,
         paddingBottom: 40,
     },
@@ -349,10 +373,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#2563EB',
         paddingVertical: 16,
         borderRadius: 14,
         gap: 8,
+    },
+    saveBtnDisabled: {
+        opacity: 0.6,
     },
     saveBtnText: {
         color: '#FFFFFF',

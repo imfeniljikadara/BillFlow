@@ -13,6 +13,7 @@ import {
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Invoice, UserProfile, Product, Client } from '../types';
+import { checkAndGenerateRecurringInvoices } from '../utils/recurringInvoiceScheduler';
 
 interface AppState {
     // Auth State
@@ -27,6 +28,7 @@ interface AppState {
 
     // Actions
     initialize: () => () => void; // Returns cleanup function
+    refreshData: () => Promise<void>;
     addInvoice: (invoice: Omit<Invoice, 'id'>) => Promise<void>;
     updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
     deleteInvoice: (id: string) => Promise<void>;
@@ -99,6 +101,9 @@ export const useAppStore = create<AppState>((set, get) => ({
                     })) as Invoice[];
 
                     set({ invoices });
+
+                    // Auto-generate any due recurring invoices
+                    checkAndGenerateRecurringInvoices().catch(console.error);
                 });
 
                 // 4. Subscribe to Products (filtered by user)
@@ -143,6 +148,16 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (unsubscribeProducts) unsubscribeProducts();
             if (unsubscribeClients) unsubscribeClients();
         };
+    },
+
+    // Real data refresh — forces Firestore listeners to re-evaluate
+    refreshData: async () => {
+        const { user } = get();
+        if (!user) return;
+        // Firestore real-time listeners are always live, so we just
+        // re-trigger the recurring invoice check on manual refresh
+        const { invoices } = get();
+        await checkAndGenerateRecurringInvoices();
     },
 
     addInvoice: async (invoice) => {

@@ -14,7 +14,7 @@ type FilterType = 'ALL' | 'PAID' | 'PENDING' | 'OVERDUE' | 'RECURRING';
 
 export default function InvoicesTabScreen() {
     const router = useRouter();
-    const { invoices } = useAppStore();
+    const { invoices, refreshData } = useAppStore();
     const { isDark, colors } = useTheme();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,11 +41,11 @@ export default function InvoicesTabScreen() {
                 const matchesClient = inv.clientName.toLowerCase().includes(query) ||
                     inv.clientEmail?.toLowerCase().includes(query) ||
                     inv.id.toLowerCase().includes(query);
-                
-                const matchesItems = inv.items?.some(item => 
+
+                const matchesItems = inv.items?.some(item =>
                     item.description.toLowerCase().includes(query)
                 );
-                
+
                 return matchesClient || matchesItems;
             });
         }
@@ -53,7 +53,7 @@ export default function InvoicesTabScreen() {
         // Sort
         result.sort((a, b) => {
             let comparison = 0;
-            
+
             switch (sortBy) {
                 case 'date':
                     comparison = new Date(a.dateCreated).getTime() - new Date(b.dateCreated).getTime();
@@ -65,7 +65,7 @@ export default function InvoicesTabScreen() {
                     comparison = a.clientName.localeCompare(b.clientName);
                     break;
             }
-            
+
             return sortOrder === 'asc' ? comparison : -comparison;
         });
 
@@ -81,9 +81,10 @@ export default function InvoicesTabScreen() {
         recurring: invoices.filter(inv => inv.isRecurring === true).length,
     }), [invoices]);
 
-    const onRefresh = () => {
+    const onRefresh = async () => {
         setRefreshing(true);
-        setTimeout(() => setRefreshing(false), 1000);
+        await refreshData();
+        setRefreshing(false);
     };
 
     const filters: { key: FilterType; label: string; count: number }[] = [
@@ -189,10 +190,10 @@ export default function InvoicesTabScreen() {
                             {option.charAt(0).toUpperCase() + option.slice(1)}
                         </Text>
                         {sortBy === option && (
-                            <Feather 
-                                name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} 
-                                size={12} 
-                                color="#FFF" 
+                            <Feather
+                                name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'}
+                                size={12}
+                                color="#FFF"
                             />
                         )}
                     </TouchableOpacity>

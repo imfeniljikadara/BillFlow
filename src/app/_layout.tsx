@@ -33,6 +33,7 @@ function RootLayoutInner() {
                 <Stack.Screen name="invoices" />
                 <Stack.Screen name="payment-details" />
                 <Stack.Screen name="invoice/[id]" />
+                <Stack.Screen name="clients" />
             </Stack>
         </View>
     );

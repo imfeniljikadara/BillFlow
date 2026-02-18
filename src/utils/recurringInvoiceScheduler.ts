@@ -15,7 +15,7 @@ export async function checkAndGenerateRecurringInvoices(): Promise<number> {
 
     try {
         const now = new Date();
-        
+
         // Query for recurring invoices where nextRecurrenceDate has passed
         const q = query(
             collection(db, `users/${user.uid}/invoices`),
@@ -69,7 +69,7 @@ async function generateNextRecurringInvoice(userId: string, template: Invoice): 
 
         // Update the template's nextRecurrenceDate
         const updatedNextDate = calculateNextRecurrenceDate(
-            new Date(template.nextRecurrenceDate),
+            new Date(template.nextRecurrenceDate!),
             template.recurrenceInterval!
         );
 
@@ -116,7 +116,7 @@ export async function manuallyGenerateRecurringInvoice(invoiceId: string): Promi
     try {
         const invoiceRef = doc(db, `users/${user.uid}/invoices`, invoiceId);
         const snapshot = await getDocs(query(collection(db, `users/${user.uid}/invoices`), where('__name__', '==', invoiceId)));
-        
+
         if (snapshot.empty) {
             throw new Error('Invoice not found');
         }
