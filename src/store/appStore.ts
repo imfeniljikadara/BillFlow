@@ -14,12 +14,17 @@ import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEma
 import { db, auth } from '../config/firebase';
 import { Invoice, UserProfile, Product, Client } from '../types';
 import { checkAndGenerateRecurringInvoices } from '../utils/recurringInvoiceScheduler';
+import { startRecurringInvoiceScheduler, stopRecurringInvoiceScheduler, checkRecurringInvoicesNow } from '../utils/invoiceScheduler';
+import { checkAndMarkOverdueInvoices } from '../utils/overdueChecker';
+import { isNetworkError, logError, getErrorMessage, retryWithBackoff } from '../utils/errorHandler';
 
 interface AppState {
     // Auth State
     user: User | null;
     userProfile: UserProfile | null;
     isLoading: boolean;
+    isOffline: boolean; // New: offline state
+    lastError: string | null; // New: last error message
 
     // Invoice State
     invoices: Invoice[];
@@ -31,11 +36,13 @@ interface AppState {
     refreshData: () => Promise<void>;
     addInvoice: (invoice: Omit<Invoice, 'id'>) => Promise<void>;
     updateInvoice: (id: string, updates: Partial<Invoice>) => Promise<void>;
-    deleteInvoice: (id: string) => Promise<void>;
+    deleteInvoice: (id: string) => Promise<void>; // Archives invoice
+    restoreInvoice: (id: string) => Promise<void>; // Unarchive invoice
     updateInvoiceStatus: (id: string, status: 'PENDING' | 'PAID' | 'OVERDUE') => Promise<void>;
     getInvoice: (id: string) => Invoice | undefined;
     duplicateInvoice: (id: string) => Promise<void>;
     sendReminder: (id: string) => Promise<void>;
+    generateInvoiceNumber: () => Promise<string>; // Generate next invoice number
 
     // Product Actions
     addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
@@ -56,6 +63,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     user: null,
     userProfile: null,
     isLoading: true,
+    isOffline: false,
+    lastError: null,
     invoices: [],
     products: [],
     clients: [],
@@ -78,6 +87,9 @@ export const useAppStore = create<AppState>((set, get) => ({
                 // Set user but keep isLoading true until profile is fetched
                 set({ user });
 
+                // Start recurring invoice scheduler when user logs in
+                startRecurringInvoiceScheduler();
+
                 // 2. Subscribe to User Profile — this resolves isLoading
                 unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
                     if (docSnap.exists()) {
@@ -94,17 +106,36 @@ export const useAppStore = create<AppState>((set, get) => ({
                     orderBy('dateCreated', 'desc')
                 );
 
-                unsubscribeInvoices = onSnapshot(qInvoices, (snapshot) => {
-                    const invoices = snapshot.docs.map(doc => ({
-                        ...doc.data(),
-                        id: doc.id
-                    })) as Invoice[];
+                unsubscribeInvoices = onSnapshot(
+                    qInvoices, 
+                    (snapshot) => {
+                        const allInvoices = snapshot.docs.map(doc => ({
+                            ...doc.data(),
+                            id: doc.id
+                        })) as Invoice[];
 
-                    set({ invoices });
+                        // Filter out archived invoices from normal view
+                        const invoices = allInvoices.filter(inv => !inv.isArchived);
 
-                    // Auto-generate any due recurring invoices
-                    checkAndGenerateRecurringInvoices().catch(console.error);
-                });
+                        set({ invoices, isOffline: false, lastError: null });
+
+                        // Auto-generate any due recurring invoices
+                        checkAndGenerateRecurringInvoices().catch(console.error);
+                        
+                        // Check and mark overdue invoices (only non-archived)
+                        const store = get();
+                        checkAndMarkOverdueInvoices(invoices, store.updateInvoiceStatus).catch(console.error);
+                    },
+                    (error) => {
+                        // Error callback for invoice listener
+                        logError('invoicesListener', error);
+                        if (isNetworkError(error)) {
+                            set({ isOffline: true, lastError: 'Network error. Showing cached data.' });
+                        } else {
+                            set({ lastError: getErrorMessage(error) });
+                        }
+                    }
+                );
 
                 // 4. Subscribe to Products (filtered by user)
                 const qProducts = query(
@@ -112,31 +143,50 @@ export const useAppStore = create<AppState>((set, get) => ({
                     orderBy('name', 'asc')
                 );
 
-                unsubscribeProducts = onSnapshot(qProducts, (snapshot) => {
-                    const products = snapshot.docs.map(doc => ({
-                        ...doc.data(),
-                        id: doc.id
-                    })) as Product[];
+                unsubscribeProducts = onSnapshot(
+                    qProducts,
+                    (snapshot) => {
+                        const products = snapshot.docs.map(doc => ({
+                            ...doc.data(),
+                            id: doc.id
+                        })) as Product[];
 
-                    set({ products });
-                });
+                        set({ products });
+                    },
+                    (error) => {
+                        logError('productsListener', error);
+                        if (isNetworkError(error)) {
+                            set({ isOffline: true });
+                        }
+                    }
+                );
+
                 // 5. Subscribe to Clients
                 const qClients = query(
                     collection(db, `users/${user.uid}/clients`),
                     orderBy('name', 'asc')
                 );
 
-                unsubscribeClients = onSnapshot(qClients, (snapshot) => {
-                    const clients = snapshot.docs.map(doc => ({
-                        ...doc.data(),
-                        id: doc.id
-                    })) as Client[];
+                unsubscribeClients = onSnapshot(
+                    qClients,
+                    (snapshot) => {
+                        const clients = snapshot.docs.map(doc => ({
+                            ...doc.data(),
+                            id: doc.id
+                        })) as Client[];
 
-                    set({ clients });
-                });
-            } else {
-                // No user — clear everything and stop loading
-                set({ user: null, invoices: [], products: [], clients: [], userProfile: null, isLoading: false });
+                        set({ clients });
+                    },
+                    (error) => {
+                        logError('clientsListener', error);
+                        if (isNetworkError(error)) {
+                            set({ isOffline: true });
+                        }
+                    }
+                );
+
+                // Stop scheduler when user logs out
+                stopRecurringInvoiceScheduler();
             }
         });
 
@@ -147,6 +197,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (unsubscribeInvoices) unsubscribeInvoices();
             if (unsubscribeProducts) unsubscribeProducts();
             if (unsubscribeClients) unsubscribeClients();
+            // Stop scheduler on cleanup
+            stopRecurringInvoiceScheduler();
+            if (unsubscribeInvoices) unsubscribeInvoices();
+            if (unsubscribeProducts) unsubscribeProducts();
+            if (unsubscribeClients) unsubscribeClients();
+            // Stop scheduler on cleanup
+            stopRecurringInvoiceScheduler();
         };
     },
 
@@ -156,17 +213,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (!user) return;
         // Firestore real-time listeners are always live, so we just
         // re-trigger the recurring invoice check on manual refresh
-        const { invoices } = get();
-        await checkAndGenerateRecurringInvoices();
+        await checkRecurringInvoicesNow();
     },
 
     addInvoice: async (invoice) => {
         try {
             const user = auth.currentUser;
             if (!user) throw new Error('User not authenticated');
-            await addDoc(collection(db, `users/${user.uid}/invoices`), invoice);
+            await retryWithBackoff(async () => {
+                await addDoc(collection(db, `users/${user.uid}/invoices`), invoice);
+            });
+            // Clear any previous errors on success
+            set({ lastError: null });
         } catch (e) {
-            console.error('Error adding invoice:', e);
+            logError('addInvoice', e);
+            set({ lastError: getErrorMessage(e) });
             throw e;
         }
     },
@@ -176,9 +237,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             const user = auth.currentUser;
             if (!user) throw new Error('User not authenticated');
             const docRef = doc(db, `users/${user.uid}/invoices`, id);
-            await updateDoc(docRef, updates);
+            await retryWithBackoff(async () => {
+                await updateDoc(docRef, updates);
+            });
+            set({ lastError: null });
         } catch (e) {
-            console.error('Error updating invoice:', e);
+            logError('updateInvoice', e);
+            set({ lastError: getErrorMessage(e) });
         }
     },
 
@@ -186,9 +251,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         try {
             const user = auth.currentUser;
             if (!user) throw new Error('User not authenticated');
-            await deleteDoc(doc(db, `users/${user.uid}/invoices`, id));
+            // Soft delete - mark as archived instead of permanently deleting
+            const docRef = doc(db, `users/${user.uid}/invoices`, id);
+            await retryWithBackoff(async () => {
+                await updateDoc(docRef, {
+                    isArchived: true,
+                    archivedAt: new Date().toISOString()
+                });
+            });
+            set({ lastError: null });
         } catch (e) {
-            console.error('Error deleting invoice:', e);
+            logError('deleteInvoice', e);
+            set({ lastError: getErrorMessage(e) });
+        }
+    },
+
+    restoreInvoice: async (id) => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            // Unarchive invoice
+            const docRef = doc(db, `users/${user.uid}/invoices`, id);
+            await updateDoc(docRef, {
+                isArchived: false
+            });
+        } catch (e) {
+            console.error('Error restoring invoice:', e);
         }
     },
 
@@ -297,6 +385,29 @@ export const useAppStore = create<AppState>((set, get) => ({
             });
         } catch (e) {
             console.error('Error sending reminder:', e);
+            throw e;
+        }
+    },
+
+    generateInvoiceNumber: async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) throw new Error('User not authenticated');
+            
+            const { userProfile } = get();
+            let counter = userProfile?.invoiceCounter || 0;
+            counter += 1;
+            
+            // Update the profile with new counter
+            await updateDoc(doc(db, 'users', user.uid), {
+                invoiceCounter: counter
+            });
+            
+            // Generate formatted invoice number (INV-001, INV-002, etc)
+            const invoiceNumber = `INV-${String(counter).padStart(3, '0')}`;
+            return invoiceNumber;
+        } catch (e) {
+            console.error('Error generating invoice number:', e);
             throw e;
         }
     },

@@ -21,6 +21,7 @@ export interface Invoice {
     status: InvoiceStatus;
     notes?: string;
     invoiceNumber?: string;
+    isArchived?: boolean; // True if archived, not permanently deleted
 
     // Recurrence
     isRecurring?: boolean;
@@ -62,4 +63,5 @@ export interface UserProfile {
     gstNumber?: string;
     isPro?: boolean;
     onboardingComplete?: boolean;
+    invoiceCounter?: number; // Counter for auto-generated invoice numbers
 }

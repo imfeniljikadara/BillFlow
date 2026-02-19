@@ -264,6 +264,17 @@ export default function ClientsScreen() {
                             onChangeText={setAddress}
                         />
 
+                        <Text style={[styles.label, { color: colors.textSecondary }]}>NOTES</Text>
+                        <TextInput
+                            style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }, { height: 80 }]}
+                            placeholder="Internal notes (max 500 chars)"
+                            placeholderTextColor={colors.textSecondary}
+                            value={clientNotes}
+                            onChangeText={(text) => setClientNotes(text.substring(0, 500))}
+                            multiline
+                            maxLength={500}
+                        />
+
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
                                 style={[styles.modalBtn, { backgroundColor: colors.inputBg }]}

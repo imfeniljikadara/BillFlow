@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, RefreshControl, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { LineChart } from 'react-native-chart-kit';
+import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Feather } from '@expo/vector-icons';
 import { useAppStore } from '../../store/appStore';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -16,6 +16,7 @@ export default function HomeScreen() {
     const { invoices, userProfile, refreshData } = useAppStore();
     const { isDark, colors } = useTheme();
     const [refreshing, setRefreshing] = useState(false);
+    const [chartView, setChartView] = useState<'monthly' | 'weekly'>('monthly');
 
     // Get greeting based on time
     const getGreeting = () => {
@@ -36,20 +37,56 @@ export default function HomeScreen() {
         .filter(inv => inv.status === 'PENDING')
         .reduce((sum, inv) => sum + inv.amount, 0);
 
-    const totalAmount = totalCollected + pendingAmount;
+    const overdueAmount = invoices
+        .filter(inv => inv.status === 'OVERDUE')
+        .reduce((sum, inv) => sum + inv.amount, 0);
+
+    const overdueCount = invoices.filter(inv => inv.status === 'OVERDUE').length;
+
+    const totalAmount = totalCollected + pendingAmount + overdueAmount;
 
     // Recent Invoices (last 5)
     const recentInvoices = [...invoices]
         .sort((a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime())
         .slice(0, 5);
 
-    // Calculate real monthly data for chart
-    const chartData = useMemo(() => {
+    // Smart Y-axis formatter with CONSISTENT intervals
+    const formatYAxis = (maxValue: number) => {
+        let interval = 1;
+        let divisor = 1;
+        let suffix = '';
+
+        if (maxValue >= 1000000) {
+            // 1M, 2M, 3M, 4M...
+            divisor = 1000000;
+            suffix = 'M';
+            interval = Math.max(1, Math.ceil(maxValue / 1000000 / 5));
+        } else if (maxValue >= 100000) {
+            // 100k, 200k, 300k, 400k...
+            divisor = 1000;
+            suffix = 'K';
+            interval = Math.max(100000, Math.round(maxValue / 5 / 100000) * 100000);
+        } else if (maxValue >= 10000) {
+            // 10k, 20k, 30k, 40k...
+            divisor = 1000;
+            suffix = 'K';
+            interval = Math.max(10000, Math.round(maxValue / 5 / 10000) * 10000);
+        } else {
+            // 1k, 2k, 3k, 4k...
+            divisor = 1000;
+            suffix = 'K';
+            interval = Math.max(1000, Math.round(maxValue / 5 / 1000) * 1000);
+        }
+
+        return { interval, divisor, suffix };
+    };
+
+    // Calculate monthly chart data
+    const monthlyChartData = useMemo(() => {
         const now = new Date();
         const thisMonth = now.getMonth();
         const thisYear = now.getFullYear();
 
-        // Get last 4 months of data
         const monthlyData: { label: string; amount: number }[] = [];
         for (let i = 3; i >= 0; i--) {
             const d = new Date(thisYear, thisMonth - i, 1);
@@ -64,19 +101,65 @@ export default function HomeScreen() {
             monthlyData.push({ label: monthNames[m], amount: monthTotal });
         }
 
-        // Ensure we have valid data (at least some non-zero value or minimum for chart)
         const amounts = monthlyData.map(d => d.amount);
         const hasData = amounts.some(a => a > 0);
+        const maxValue = Math.max(...amounts);
+        const yAxisFormat = formatYAxis(maxValue);
 
         return {
             labels: monthlyData.map(d => d.label),
             datasets: [{
                 data: hasData ? amounts : [0, 0, 0, 0],
-                color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
-                strokeWidth: 2
-            }]
+                color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
+                strokeWidth: 3
+            }],
+            yAxisFormat
         };
     }, [invoices]);
+
+    // Calculate weekly chart data
+    const weeklyChartData = useMemo(() => {
+        const now = new Date();
+        const weeklyData: { label: string; amount: number }[] = [];
+
+        // Get last 4 weeks
+        for (let i = 3; i >= 0; i--) {
+            const weekStart = new Date(now);
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay() - (i * 7));
+            
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+
+            const weekLabel = `W${Math.ceil((weekStart.getDate()) / 7)}`;
+            
+            const weekTotal = invoices
+                .filter(inv => {
+                    const invDate = new Date(inv.dateCreated);
+                    return invDate >= weekStart && invDate <= weekEnd;
+                })
+                .reduce((sum, inv) => sum + inv.amount, 0);
+            
+            weeklyData.push({ label: weekLabel, amount: weekTotal });
+        }
+
+        const amounts = weeklyData.map(d => d.amount);
+        const hasData = amounts.some(a => a > 0);
+        const maxValue = Math.max(...amounts);
+        const yAxisFormat = formatYAxis(maxValue);
+
+        return {
+            labels: weeklyData.map(d => d.label),
+            datasets: [{
+                data: hasData ? amounts : [0, 0, 0, 0],
+                color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
+                strokeWidth: 3
+            }],
+            yAxisFormat
+        };
+    }, [invoices]);
+
+    // Select current chart data based on view
+    const currentChartData = chartView === 'monthly' ? monthlyChartData : weeklyChartData;
 
     // Calculate month-over-month growth
     const growth = useMemo(() => {
@@ -149,23 +232,57 @@ export default function HomeScreen() {
             >
                 {/* Quick Stats Cards */}
                 <View style={styles.quickStats}>
-                    <TouchableOpacity style={[styles.quickStatCard, { backgroundColor: '#2563EB' }]}>
-                        <Feather name="arrow-up-right" size={20} color="rgba(255,255,255,0.7)" />
+                    <TouchableOpacity 
+                        style={[styles.quickStatCard, { backgroundColor: '#10B981' }]}
+                        onPress={() => router.push('/(tabs)/invoices')}
+                    >
+                        <Feather name="check-circle" size={20} color="rgba(255,255,255,0.7)" />
                         <Text style={styles.quickStatLabel}>Collected</Text>
-                        <Text style={styles.quickStatValue}>₹{totalCollected.toLocaleString('en-IN')}</Text>
+                        <Text style={styles.quickStatValue}>₹{(totalCollected / 1000).toFixed(0)}K</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.quickStatCard, { backgroundColor: '#F59E0B' }]}>
+                    <TouchableOpacity 
+                        style={[styles.quickStatCard, { backgroundColor: '#F59E0B' }]}
+                        onPress={() => router.push('/(tabs)/invoices')}
+                    >
                         <Feather name="clock" size={20} color="rgba(255,255,255,0.7)" />
                         <Text style={styles.quickStatLabel}>Pending</Text>
-                        <Text style={styles.quickStatValue}>₹{pendingAmount.toLocaleString('en-IN')}</Text>
+                        <Text style={styles.quickStatValue}>₹{(pendingAmount / 1000).toFixed(0)}K</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.quickStatCard, { backgroundColor: '#EF4444' }]}
+                        onPress={() => router.push('/(tabs)/invoices')}
+                    >
+                        <Feather name="alert-circle" size={20} color="rgba(255,255,255,0.7)" />
+                        <Text style={styles.quickStatLabel}>Overdue</Text>
+                        <Text style={styles.quickStatValue}>{overdueCount}</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Main Chart Card */}
+                {/* Overdue Alert Card */}
+                {overdueCount > 0 && (
+                    <TouchableOpacity 
+                        style={[styles.alertCard, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}
+                        onPress={() => router.push('/(tabs)/invoices')}
+                    >
+                        <View style={styles.alertIcon}>
+                            <Feather name="alert-circle" size={20} color="#EF4444" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.alertTitle, { color: '#991B1B' }]}>You have {overdueCount} overdue invoice{overdueCount > 1 ? 's' : ''}</Text>
+                            <Text style={[styles.alertSubtitle, { color: '#DC2626' }]}>₹{overdueAmount.toLocaleString('en-IN')} waiting for payment</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                )}
+
+                {/* Revenue Trend Card - Completely Redesigned */}
                 {invoices.length > 0 && (
                     <View style={[styles.mainCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                         <View style={styles.cardHeader}>
-                            <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Total Revenue</Text>
+                            <View>
+                                <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>Revenue Trend</Text>
+                                <Text style={[styles.bigAmount, { color: colors.text }]}>₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 0 })}</Text>
+                            </View>
                             <View style={[styles.trendBadge, { backgroundColor: growth >= 0 ? '#10B98115' : '#EF444415' }]}>
                                 <Feather name={growth >= 0 ? 'trending-up' : 'trending-down'} size={12} color={growth >= 0 ? '#10B981' : '#EF4444'} />
                                 <Text style={[styles.trendText, { color: growth >= 0 ? '#10B981' : '#EF4444' }]}>
@@ -173,37 +290,112 @@ export default function HomeScreen() {
                                 </Text>
                             </View>
                         </View>
-                        <Text style={[styles.bigAmount, { color: colors.text }]}>₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text>
 
-                        <LineChart
-                            data={chartData}
-                            width={width - 80}
-                            height={140}
-                            withInnerLines={false}
-                            withOuterLines={false}
-                            withVerticalLines={false}
-                            withHorizontalLines={false}
-                            withDots={true}
-                            withShadow={false}
-                            chartConfig={{
-                                backgroundColor: colors.card,
-                                backgroundGradientFrom: colors.card,
-                                backgroundGradientTo: colors.card,
-                                decimalPlaces: 0,
-                                color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
-                                labelColor: () => colors.textSecondary,
-                                propsForDots: {
-                                    r: "4",
-                                    strokeWidth: "2",
-                                    stroke: "#2563EB"
-                                },
-                                propsForLabels: {
-                                    fontSize: 11,
-                                }
-                            }}
-                            bezier
-                            style={{ marginTop: 8, marginLeft: -16 }}
-                        />
+                        {/* Chart View Toggle */}
+                        <View style={styles.chartToggle}>
+                            <TouchableOpacity 
+                                style={[styles.toggleBtn, chartView === 'monthly' && { backgroundColor: colors.primary }]}
+                                onPress={() => setChartView('monthly')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.toggleBtnText, { color: chartView === 'monthly' ? '#FFF' : colors.textSecondary }]}>Monthly</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.toggleBtn, chartView === 'weekly' && { backgroundColor: colors.primary }]}
+                                onPress={() => setChartView('weekly')}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={[styles.toggleBtnText, { color: chartView === 'weekly' ? '#FFF' : colors.textSecondary }]}>Weekly</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Custom Interactive Chart with Proper Y-Axis */}
+                        <View style={styles.chartContainer}>
+                            {/* Y-Axis Labels */}
+                            <View style={styles.yAxisLabels}>
+                                {(() => {
+                                    const data = currentChartData.datasets[0].data;
+                                    const maxValue = Math.max(...data);
+                                    const format = currentChartData.yAxisFormat;
+                                    const steps = [0, 1, 2, 3, 4];
+                                    
+                                    return steps.map((step) => {
+                                        const value = (maxValue / 4) * step;
+                                        let label = '';
+                                        
+                                        if (format.divisor === 1000000) {
+                                            label = `${(value / 1000000).toFixed(0)}M`;
+                                        } else if (format.divisor === 1000) {
+                                            label = `${(value / 1000).toFixed(0)}K`;
+                                        } else {
+                                            label = `${value.toFixed(0)}`;
+                                        }
+                                        
+                                        return (
+                                            <Text key={step} style={[styles.yAxisLabel, { color: colors.textSecondary }]}>
+                                                {label}
+                                            </Text>
+                                        );
+                                    });
+                                })()}
+                            </View>
+
+                            {/* Actual Chart */}
+                            <LineChart
+                                data={currentChartData}
+                                width={width - 110}
+                                height={200}
+                                withInnerLines={false}
+                                withOuterLines={false}
+                                withVerticalLines={false}
+                                withHorizontalLines={true}
+                                withDots={true}
+                                withShadow={true}
+                                chartConfig={{
+                                    backgroundColor: colors.card,
+                                    backgroundGradientFrom: colors.card,
+                                    backgroundGradientTo: colors.card,
+                                    decimalPlaces: 0,
+                                    color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
+                                    labelColor: () => colors.textSecondary,
+                                    propsForDots: {
+                                        r: "5",
+                                        strokeWidth: "2",
+                                        stroke: colors.primary
+                                    },
+                                    propsForLabels: {
+                                        fontSize: 11,
+                                    },
+                                    propsForHorizontalLabels: {
+                                        fontSize: 10,
+                                    }
+                                }}
+                                bezier
+                                style={{ marginLeft: -10 }}
+                            />
+                        </View>
+
+                        {/* Data Breakdown - Interactive */}
+                        <View style={styles.dataBreakdown}>
+                            {currentChartData.labels.map((label, index) => {
+                                const value = currentChartData.datasets[0].data[index];
+                                const percentage = (value / Math.max(...currentChartData.datasets[0].data)) * 100;
+                                
+                                return (
+                                    <TouchableOpacity 
+                                        key={index}
+                                        style={[styles.breakdownItem, { borderColor: colors.border }]}
+                                        activeOpacity={0.6}
+                                    >
+                                        <View style={styles.breakdownLabel}>
+                                            <Text style={[styles.breakdownPeriod, { color: colors.text }]}>{label}</Text>
+                                            <Text style={[styles.breakdownValue, { color: colors.textSecondary }]}>₹{(value / 1000).toFixed(0)}K</Text>
+                                        </View>
+                                        <View style={[styles.breakdownBar, { backgroundColor: colors.primary, width: `${percentage}%` }]} />
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
                     </View>
                 )}
 
@@ -348,6 +540,32 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginTop: 4,
     },
+    alertCard: {
+        marginHorizontal: 24,
+        borderRadius: 16,
+        padding: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        marginBottom: 20,
+        gap: 12,
+    },
+    alertIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#FEE2E2',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    alertTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    alertSubtitle: {
+        fontSize: 12,
+    },
     mainCard: {
         marginHorizontal: 24,
         borderRadius: 24,
@@ -359,6 +577,72 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        marginBottom: 12,
+    },
+    chartToggle: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 16,
+    },
+    toggleBtn: {
+        flex: 1,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+    },
+    toggleBtnText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    chartContainer: {
+        flexDirection: 'row',
+        marginVertical: 16,
+        gap: 8,
+    },
+    yAxisLabels: {
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        paddingRight: 8,
+        minWidth: 35,
+        height: 200,
+    },
+    yAxisLabel: {
+        fontSize: 10,
+        fontWeight: '500',
+    },
+    dataBreakdown: {
+        marginTop: 16,
+        borderTopWidth: 1,
+        paddingTop: 12,
+        gap: 8,
+    },
+    breakdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 0,
+        borderBottomWidth: 1,
+        gap: 12,
+    },
+    breakdownLabel: {
+        minWidth: 70,
+    },
+    breakdownPeriod: {
+        fontSize: 12,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    breakdownValue: {
+        fontSize: 11,
+    },
+    breakdownBar: {
+        flex: 1,
+        height: 6,
+        borderRadius: 3,
+        opacity: 0.6,
     },
     cardLabel: {
         fontSize: 13,
@@ -442,6 +726,7 @@ const styles = StyleSheet.create({
     invoicesList: {
         paddingHorizontal: 24,
         marginBottom: 24,
+        gap: 12,
     },
 
     actionsGrid: {

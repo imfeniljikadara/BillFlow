@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -71,6 +72,7 @@ export default function LoginScreen() {
             style={[styles.container, { backgroundColor: colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
+            <StatusBar style={isDark ? 'light' : 'dark'} />
             <View style={styles.content}>
                 {/* Header */}
                 <View style={styles.header}>

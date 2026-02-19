@@ -12,11 +12,11 @@ export default function ProfileScreen() {
     const { isDark, toggleTheme, colors } = useTheme();
 
     const menuItems = [
-        { label: 'Business Profile', icon: 'briefcase', route: '/onboarding' },
-        { label: 'Payment Details', icon: 'credit-card', route: '/payment-details' },
-        { label: 'Product Library', icon: 'package', route: '/(tabs)/products' },
-        { label: 'Invoice History', icon: 'file-text', route: '/(tabs)/invoices' },
-        { label: 'Notification Settings', icon: 'bell', route: null as string | null },
+        { label: 'Business Profile', icon: 'briefcase', route: '/onboarding', available: true },
+        { label: 'Payment Details', icon: 'credit-card', route: '/payment-details', available: true },
+        { label: 'Product Library', icon: 'package', route: '/(tabs)/products', available: true },
+        { label: 'Invoice History', icon: 'file-text', route: '/(tabs)/invoices', available: true },
+        { label: 'Notification Settings', icon: 'bell', route: '', available: false },
     ];
 
     const handleLogout = async () => {
@@ -24,8 +24,8 @@ export default function ProfileScreen() {
         router.replace('/login');
     };
 
-    const handleMenuPress = (item: { label: string; route: string | null }) => {
-        if (item.route) {
+    const handleMenuPress = (item: any) => {
+        if (item.available && item.route) {
             router.push(item.route as any);
         } else {
             // Coming soon features

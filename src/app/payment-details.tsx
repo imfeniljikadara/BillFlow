@@ -9,6 +9,16 @@ import QRCode from 'react-native-qrcode-svg';
 import { useAppStore } from '../store/appStore';
 import { useTheme } from '../contexts/ThemeContext';
 
+// UPI ID validation
+const UPI_REGEX = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$/;
+const validateUpiId = (upi: string): { valid: boolean; error?: string } => {
+    if (!upi.trim()) return { valid: true }; // UPI is optional
+    if (!UPI_REGEX.test(upi)) {
+        return { valid: false, error: 'Invalid UPI format. Example: yourname@upi' };
+    }
+    return { valid: true };
+};
+
 export default function PaymentDetailsScreen() {
     const router = useRouter();
     const { userProfile } = useAppStore();
@@ -38,6 +48,15 @@ export default function PaymentDetailsScreen() {
     }, [userProfile]);
 
     const handleSave = async () => {
+        // Validate UPI ID if provided
+        if (upiId.trim()) {
+            const validation = validateUpiId(upiId);
+            if (!validation.valid) {
+                Alert.alert('Invalid UPI', validation.error || 'Please enter a valid UPI ID');
+                return;
+            }
+        }
+
         setLoading(true);
         try {
             const currentUser = auth.currentUser;

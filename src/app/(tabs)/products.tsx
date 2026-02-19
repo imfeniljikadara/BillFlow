@@ -16,14 +16,36 @@ export default function ProductsScreen() {
     const [price, setPrice] = useState('');
 
     const handleAddProduct = async () => {
-        if (!name || !price) {
-            Alert.alert('Error', 'Please enter Name and Price');
+        if (!name.trim()) {
+            Alert.alert('Error', 'Please enter Item Name');
+            return;
+        }
+
+        if (!price.trim()) {
+            Alert.alert('Error', 'Please enter Price');
+            return;
+        }
+
+        const priceNum = parseFloat(price);
+        if (isNaN(priceNum) || priceNum <= 0) {
+            Alert.alert('Error', 'Price must be greater than 0');
+            return;
+        }
+
+        if (priceNum > 9999999) {
+            Alert.alert('Error', 'Price cannot exceed ₹99,99,999');
+            return;
+        }
+
+        const decimalPlaces = (price.split('.')[1] || '').length;
+        if (decimalPlaces > 2) {
+            Alert.alert('Error', 'Price can have maximum 2 decimal places');
             return;
         }
 
         await addProduct({
-            name,
-            price: parseFloat(price),
+            name: name.trim(),
+            price: priceNum,
         });
 
         setName('');

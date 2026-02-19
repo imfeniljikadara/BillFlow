@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAppStore } from '../store/appStore';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -27,6 +28,8 @@ export default function EditInvoiceScreen() {
     const [items, setItems] = useState<InvoiceItem[]>([{ description: '', quantity: 1, price: 0 }]);
     const [notes, setNotes] = useState('');
     const [dueDate, setDueDate] = useState('');
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(new Date());
     const [loading, setLoading] = useState(false);
     
     // Recurring invoice state
@@ -47,8 +50,29 @@ export default function EditInvoiceScreen() {
             // Load recurring settings
             setIsRecurring(invoice.isRecurring || false);
             setRecurrenceInterval(invoice.recurrenceInterval || 'monthly');
+            // Set selected date to the due date if it exists
+            if (invoice.dueDate) {
+                setSelectedDate(new Date(invoice.dueDate + 'T00:00:00'));
+            }
         }
     }, [invoice]);
+
+    const handleDateChange = (event: any, date?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowDatePicker(false);
+        }
+        if (date) {
+            setSelectedDate(date);
+            const isoDate = date.toISOString().split('T')[0];
+            setDueDate(isoDate);
+        }
+    };
+
+    const formatDateDisplay = (dateStr: string) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr + 'T00:00:00');
+        return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
 
     if (!invoice) {
         return (
@@ -352,7 +376,7 @@ export default function EditInvoiceScreen() {
                         <View style={styles.inputGroup}>
                             <Text style={[styles.label, { color: colors.textSecondary }]}>NOTES</Text>
                             <TextInput
-                                style={[styles.textArea, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                                style={[styles.noteTextArea, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                                 placeholder="Add any additional notes..."
                                 placeholderTextColor={colors.textSecondary}
                                 value={notes}
@@ -361,6 +385,43 @@ export default function EditInvoiceScreen() {
                                 numberOfLines={4}
                             />
                         </View>
+                    </View>
+                </View>
+
+                {/* Due Date Section */}
+                <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Due Date (Optional)</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <TouchableOpacity
+                            style={[styles.datePickerButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+                            onPress={() => setShowDatePicker(true)}
+                        >
+                            <Feather name="calendar" size={18} color={colors.textSecondary} />
+                            <Text style={[styles.datePickerText, { color: dueDate ? colors.text : colors.textSecondary }]}>
+                                {dueDate ? formatDateDisplay(dueDate) : 'Select due date'}
+                            </Text>
+                            {dueDate && (
+                                <TouchableOpacity onPress={() => setDueDate('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                    <Feather name="x" size={18} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                            )}
+                        </TouchableOpacity>
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={selectedDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={handleDateChange}
+                            />
+                        )}
+                        {Platform.OS === 'ios' && showDatePicker && (
+                            <TouchableOpacity 
+                                style={styles.datePickerClose}
+                                onPress={() => setShowDatePicker(false)}
+                            >
+                                <Text style={{ color: colors.primary, fontWeight: '600' }}>Done</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
 
@@ -378,7 +439,11 @@ export default function EditInvoiceScreen() {
                                     Auto-generate invoices at regular intervals
                                 </Text>
                             </View>
-                            <View style={[styles.toggleSwitch, { backgroundColor: isRecurring ? colors.primary : colors.inputBg }]}>
+                            <View style={[styles.toggleSwitch, { 
+                                backgroundColor: isRecurring ? colors.primary : colors.border,
+                                borderWidth: isRecurring ? 0 : 1,
+                                borderColor: colors.border
+                            }]}>
                                 <View style={[styles.toggleKnob, { transform: [{ translateX: isRecurring ? 20 : 0 }] }]} />
                             </View>
                         </TouchableOpacity>
@@ -573,6 +638,32 @@ const styles = StyleSheet.create({
     itemTotalValue: {
         fontSize: 16,
         fontWeight: '700',
+    },
+    noteTextArea: {
+        padding: 14,
+        borderRadius: 12,
+        fontSize: 15,
+        minHeight: 80,
+        textAlignVertical: 'top',
+        borderWidth: 1,
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 12,
+    },
+    datePickerText: {
+        flex: 1,
+        fontSize: 15,
+    },
+    datePickerClose: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderTopWidth: 1,
     },
     footer: {
         position: 'absolute',

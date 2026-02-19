@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, RefreshControl, Dimensions, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { useAppStore } from '../store/appStore';
 import { useTheme } from '../contexts/ThemeContext';
 import { Invoice } from '../types';
 import { InvoiceCard } from '../components/InvoiceCard';
+import { SwipeableInvoiceCard } from '../components/SwipeableInvoiceCard';
 
 const { width } = Dimensions.get('window');
 
@@ -14,7 +15,7 @@ type FilterType = 'ALL' | 'PAID' | 'PENDING' | 'OVERDUE' | 'RECURRING';
 
 export default function InvoicesScreen() {
     const router = useRouter();
-    const { invoices } = useAppStore();
+    const { invoices, deleteInvoice, updateInvoice } = useAppStore();
     const { isDark, colors } = useTheme();
 
     const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +113,56 @@ export default function InvoicesScreen() {
     ];
 
     const renderInvoice = ({ item, index }: { item: Invoice, index: number }) => (
-        <InvoiceCard invoice={item} index={index} />
+        <SwipeableInvoiceCard
+            invoice={item}
+            colors={colors}
+            isDark={isDark}
+            onPressCard={() => router.push(`/invoice/${item.id}`)}
+            onDelete={() => {
+                Alert.alert(
+                    'Delete Invoice',
+                    `Are you sure you want to delete the invoice for ${item.clientName}?`,
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: async () => {
+                                try {
+                                    await deleteInvoice(item.id);
+                                    Alert.alert('Success', 'Invoice deleted successfully');
+                                } catch (error) {
+                                    Alert.alert('Error', 'Failed to delete invoice');
+                                }
+                            }
+                        }
+                    ]
+                );
+            }}
+            onMarkPaid={() => {
+                Alert.alert(
+                    'Mark as Paid',
+                    `Mark the invoice for ${item.clientName} as paid?`,
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Mark Paid',
+                            style: 'default',
+                            onPress: async () => {
+                                try {
+                                    await updateInvoice(item.id, { status: 'PAID' });
+                                    Alert.alert('Success', 'Invoice marked as paid');
+                                } catch (error) {
+                                    Alert.alert('Error', 'Failed to update invoice');
+                                }
+                            }
+                        }
+                    ]
+                );
+            }}
+        >
+            <InvoiceCard invoice={item} index={index} />
+        </SwipeableInvoiceCard>
     );
 
     const renderEmptyState = () => (

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { useAppStore } from '../store/appStore';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 
 function RootLayoutInner() {
-    const { initialize } = useAppStore();
+    const { initialize, isOffline, lastError } = useAppStore();
     const { isDark, colors } = useTheme();
 
     useEffect(() => {
@@ -17,6 +17,25 @@ function RootLayoutInner() {
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <StatusBar style={isDark ? 'light' : 'dark'} />
+            
+            {/* Offline Indicator */}
+            {isOffline && (
+                <View style={{ backgroundColor: '#F97316', paddingHorizontal: 12, paddingVertical: 8 }}>
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                        📶 Offline Mode - Changes will sync when connected
+                    </Text>
+                </View>
+            )}
+
+            {/* Error Banner */}
+            {lastError && !isOffline && (
+                <View style={{ backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 8 }}>
+                    <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                        ⚠️ {lastError}
+                    </Text>
+                </View>
+            )}
+
             <Stack
                 screenOptions={{
                     headerShown: false,

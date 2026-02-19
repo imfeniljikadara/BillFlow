@@ -115,7 +115,7 @@ export const InvoiceCard = ({ invoice, index = 0 }: InvoiceCardProps) => {
                 </View>
 
                 {/* Footer / Status Line */}
-                <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : colors.surface }]}>
+                <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(148,163,184,0.15)' : 'rgba(226,232,240,0.5)' }]}>
                     <View style={styles.badgesRow}>
                         <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
                             <Feather name={getStatusIcon(invoice.status) as any} size={12} color={statusColor} />
@@ -141,7 +141,6 @@ export const InvoiceCard = ({ invoice, index = 0 }: InvoiceCardProps) => {
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 12,
         borderRadius: 16,
         borderWidth: 1,
         overflow: 'hidden',
@@ -190,7 +189,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 10,
+        paddingVertical: 8,
         borderTopWidth: 1,
     },
     badgesRow: {

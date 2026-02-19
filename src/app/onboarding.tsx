@@ -33,6 +33,16 @@ const SLIDES = [
     }
 ];
 
+// UPI ID validation regex
+const UPI_REGEX = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$/;
+const validateUpiId = (upi: string): { valid: boolean; error?: string } => {
+    if (!upi.trim()) return { valid: true }; // UPI is optional
+    if (!UPI_REGEX.test(upi)) {
+        return { valid: false, error: 'Invalid UPI format. Example: yourname@upi' };
+    }
+    return { valid: true };
+};
+
 export default function OnboardingScreen() {
     const router = useRouter();
     const { isDark, colors } = useTheme();
@@ -67,6 +77,15 @@ export default function OnboardingScreen() {
             return;
         }
 
+        // Validate UPI ID if provided
+        if (upiId.trim()) {
+            const validation = validateUpiId(upiId);
+            if (!validation.valid) {
+                Alert.alert('Invalid UPI', validation.error || 'Please enter a valid UPI ID');
+                return;
+            }
+        }
+
         setLoading(true);
         try {
             const currentUser = auth.currentUser;
@@ -76,7 +95,7 @@ export default function OnboardingScreen() {
                     onboardingComplete: true,
                     updatedAt: new Date().toISOString(),
                 };
-                // Only set UPI ID if provided
+                // Only set UPI ID if provided and valid
                 if (upiId.trim()) {
                     profileData.upiId = upiId.trim();
                 }
