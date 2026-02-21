@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "invoice-payment",
-    "slug": "invoice-payment",
-    "scheme": "quickinvoice",
+    "name": "Capital",
+    "slug": "capital",
+    "scheme": "capital",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

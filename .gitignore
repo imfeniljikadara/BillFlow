@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Agent Skills
+.agents/
+
 # Expo
 .expo/
 dist/

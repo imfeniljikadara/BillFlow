@@ -4,14 +4,20 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text } from 'react-native';
 import { useAppStore } from '../store/appStore';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { initializeNetworkListener } from '../utils/networkListener';
 
 function RootLayoutInner() {
     const { initialize, isOffline, lastError } = useAppStore();
     const { isDark, colors } = useTheme();
 
     useEffect(() => {
-        const unsub = initialize();
-        return () => unsub();
+        const unsubAuth = initialize();
+        const unsubNetwork = initializeNetworkListener();
+        
+        return () => {
+            unsubAuth();
+            unsubNetwork();
+        };
     }, []);
 
     return (

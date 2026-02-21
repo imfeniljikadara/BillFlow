@@ -1,8 +1,10 @@
 import { Invoice } from '../types';
+import { getUTCToday, hasDatePassed } from './dateUtils';
 
 /**
  * Checks if an invoice is overdue based on its due date
  * Returns true if due date has passed and invoice is still PENDING
+ * Uses UTC to avoid timezone issues (Issue 18)
  */
 export const isInvoiceOverdue = (invoice: Invoice): boolean => {
     // Only check PENDING invoices
@@ -11,15 +13,8 @@ export const isInvoiceOverdue = (invoice: Invoice): boolean => {
     // If no due date, it's not overdue
     if (!invoice.dueDate) return false;
     
-    // Compare due date with today
-    const dueDate = new Date(invoice.dueDate);
-    const today = new Date();
-    
-    // Reset time for accurate date comparison
-    dueDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    
-    return dueDate < today;
+    // Use UTC-aware date comparison (Issue 18)
+    return hasDatePassed(invoice.dueDate);
 };
 
 /**
